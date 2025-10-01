@@ -312,3 +312,119 @@ router.get('/stats', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+
+// DELETE /api/users/account - Supprimer le compte utilisateur
+router.delete('/account', authenticateToken, async (req, res) => {
+  try {
+    console.log('🗑️ Suppression compte [msylla01] - 2025-10-01 17:36:39:', req.user.id);
+
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mot de passe requis pour confirmer la suppression',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Récupérer l'utilisateur avec le mot de passe
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier le mot de passe
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mot de passe incorrect',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier s'il y a des réservations actives ou à venir
+    const activeBookings = await prisma.booking.count({
+      where: {
+        userId: req.user.id,
+        status: { in: ['CONFIRMED', 'PENDING'] },
+        checkIn: { gte: new Date() }
+      }
+    });
+
+    if (activeBookings > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Impossible de supprimer le compte : vous avez ${activeBookings} réservation(s) active(s). Veuillez les annuler d'abord.`,
+        activeBookings,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Transaction pour supprimer toutes les données utilisateur
+    await prisma.$transaction(async (tx) => {
+      // Supprimer les avis
+      await tx.review.deleteMany({
+        where: { userId: req.user.id }
+      });
+
+      // Supprimer les paiements liés aux réservations de l'utilisateur
+      await tx.payment.deleteMany({
+        where: {
+          booking: {
+            userId: req.user.id
+          }
+        }
+      });
+
+      // Supprimer les réservations
+      await tx.booking.deleteMany({
+        where: { userId: req.user.id }
+      });
+
+      // Supprimer l'utilisateur (soft delete)
+      await tx.user.update({
+        where: { id: req.user.id },
+        data: {
+          isActive: false,
+          email: `deleted_${req.user.id}_${Date.now()}@deleted.com`,
+          firstName: 'Compte',
+          lastName: 'Supprimé',
+          phone: null,
+          address: null,
+          birthDate: null,
+          preferences: null,
+          password: 'deleted',
+          updatedAt: new Date()
+        }
+      });
+    });
+
+    console.log('✅ Compte supprimé avec succès [msylla01]:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Compte supprimé avec succès',
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur suppression compte [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la suppression du compte',
+      timestamp: new Date().toISOString()
+    });
+  }
+});

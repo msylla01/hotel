@@ -12,7 +12,9 @@ import {
   CalendarIcon,
   PencilIcon,
   CheckIcon,
-  XMarkIcon
+  XMarkIcon,
+  TrashIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline'
 import { useProfile } from '../hooks/useProfile'
 
@@ -95,7 +97,7 @@ export default function Profile() {
       setErrors({})
       setSuccess('')
       
-      console.log('💾 Sauvegarde profil [msylla01]:', formData)
+      console.log('💾 Sauvegarde profil [msylla01] - 2025-10-01 17:42:14:', formData)
       
       const result = await updateProfile(formData)
       
@@ -449,10 +451,56 @@ export default function Profile() {
                 </div>
               </div>
 
+              {/* Actions du compte */}
+              <div className="mt-8 pt-8 border-t border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions du compte</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Link
+                    href="/profile/change-password"
+                    className="p-4 border border-blue-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-center group"
+                  >
+                    <LockClosedIcon className="w-6 h-6 text-blue-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                    <h4 className="font-medium text-blue-900">Changer le mot de passe</h4>
+                    <p className="text-sm text-blue-700 mt-1">Sécurisez votre compte</p>
+                  </Link>
+
+                  <button 
+                    onClick={() => router.push('/profile/delete-account')}
+                    className="p-4 border border-red-200 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors text-center group"
+                  >
+                    <TrashIcon className="w-6 h-6 text-red-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                    <h4 className="font-medium text-red-900">Supprimer le compte</h4>
+                    <p className="text-sm text-red-700 mt-1">Action irréversible</p>
+                  </button>
+                </div>
+
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-900 mb-2">Besoin d'aide ?</h4>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Notre équipe support est disponible 24h/24 pour vous assister.
+                  </p>
+                  <div className="flex space-x-4">
+                    <Link
+                      href="/contact"
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Contacter le support
+                    </Link>
+                    <Link
+                      href="/help"
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Centre d'aide
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
               {/* Developer Info */}
               <div className="mt-8 pt-8 border-t border-gray-200 text-center text-gray-500">
                 <p className="text-sm">
-                  Profil utilisateur avec logique DB • Développé par msylla01 • 2025-10-01 16:59:35 UTC
+                  Profil utilisateur avec gestion complète • Développé par msylla01 • 2025-10-01 17:42:14 UTC
                 </p>
               </div>
             </div>
