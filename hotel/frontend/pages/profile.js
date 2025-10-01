@@ -14,12 +14,16 @@ import {
   CheckIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline'
+import { useProfile } from '../hooks/useProfile'
 
 export default function Profile() {
   const router = useRouter()
+  const { updateProfile, changePassword, loading } = useProfile()
+  
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
+  const [errors, setErrors] = useState({})
+  const [success, setSuccess] = useState('')
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -55,7 +59,7 @@ export default function Profile() {
       email: user.email || '',
       phone: user.phone || '',
       address: user.address || '',
-      birthDate: user.birthDate || '',
+      birthDate: user.birthDate ? user.birthDate.split('T')[0] : '',
       preferences: {
         newsletter: user.preferences?.newsletter ?? true,
         smsNotifications: user.preferences?.smsNotifications ?? false,
@@ -63,12 +67,11 @@ export default function Profile() {
         specialRequests: user.preferences?.specialRequests || ''
       }
     })
-    
-    setLoading(false)
   }, [router])
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
+    setErrors({}) // Effacer les erreurs
     
     if (name.startsWith('preferences.')) {
       const prefName = name.split('.')[1]
@@ -89,20 +92,30 @@ export default function Profile() {
 
   const handleSave = async () => {
     try {
-      // Simuler une sauvegarde
-      console.log('�� Sauvegarde profil [msylla01]:', formData)
+      setErrors({})
+      setSuccess('')
       
-      // Mettre à jour le localStorage
-      const updatedUser = { ...user, ...formData }
-      localStorage.setItem('hotel_user', JSON.stringify(updatedUser))
-      setUser(updatedUser)
+      console.log('💾 Sauvegarde profil [msylla01]:', formData)
       
-      setEditing(false)
-      alert('Profil mis à jour avec succès !')
+      const result = await updateProfile(formData)
       
+      if (result.success) {
+        setUser(result.user)
+        setEditing(false)
+        setSuccess('Profil mis à jour avec succès !')
+        
+        // Faire disparaître le message de succès après 3 secondes
+        setTimeout(() => setSuccess(''), 3000)
+      } else {
+        if (result.field) {
+          setErrors({ [result.field]: result.error })
+        } else {
+          setErrors({ general: result.error })
+        }
+      }
     } catch (error) {
       console.error('❌ Erreur sauvegarde profil [msylla01]:', error)
-      alert('Erreur lors de la sauvegarde')
+      setErrors({ general: 'Erreur lors de la sauvegarde' })
     }
   }
 
@@ -114,7 +127,7 @@ export default function Profile() {
       email: user.email || '',
       phone: user.phone || '',
       address: user.address || '',
-      birthDate: user.birthDate || '',
+      birthDate: user.birthDate ? user.birthDate.split('T')[0] : '',
       preferences: {
         newsletter: user.preferences?.newsletter ?? true,
         smsNotifications: user.preferences?.smsNotifications ?? false,
@@ -123,18 +136,16 @@ export default function Profile() {
       }
     })
     setEditing(false)
+    setErrors({})
+    setSuccess('')
   }
 
-  if (loading) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     )
-  }
-
-  if (!user) {
-    return null
   }
 
   return (
@@ -174,18 +185,34 @@ export default function Profile() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-2xl shadow-sm overflow-hidden"
           >
+            {/* Erreurs globales */}
+            {errors.general && (
+              <div className="bg-red-50 border-l-4 border-red-400 p-4">
+                <div className="text-red-700">{errors.general}</div>
+              </div>
+            )}
+
+            {/* Message de succès */}
+            {success && (
+              <div className="bg-green-50 border-l-4 border-green-400 p-4">
+                <div className="text-green-700">{success}</div>
+              </div>
+            )}
+
             {/* Profile Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-800 px-8 py-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="w-20 h-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                     <span className="text-white text-2xl font-bold">
-                      {user.firstName?.[0]}{user.lastName?.[0]}
+                      {(formData.firstName?.[0] || user.firstName?.[0] || 'U')}{(formData.lastName?.[0] || user.lastName?.[0] || '')}
                     </span>
                   </div>
                   <div className="text-white">
-                    <h1 className="text-2xl font-bold">{user.firstName} {user.lastName}</h1>
-                    <p className="text-blue-100">{user.email}</p>
+                    <h1 className="text-2xl font-bold">
+                      {formData.firstName || user.firstName} {formData.lastName || user.lastName}
+                    </h1>
+                    <p className="text-blue-100">{formData.email || user.email}</p>
                     <p className="text-blue-200 text-sm">
                       Membre depuis {user.createdAt ? new Date(user.createdAt).getFullYear() : '2024'}
                     </p>
@@ -197,14 +224,20 @@ export default function Profile() {
                     <>
                       <button
                         onClick={handleSave}
-                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                        disabled={loading}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
                       >
-                        <CheckIcon className="w-4 h-4" />
-                        <span>Sauvegarder</span>
+                        {loading ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <CheckIcon className="w-4 h-4" />
+                        )}
+                        <span>{loading ? 'Sauvegarde...' : 'Sauvegarder'}</span>
                       </button>
                       <button
                         onClick={handleCancel}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                        disabled={loading}
+                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
                       >
                         <XMarkIcon className="w-4 h-4" />
                         <span>Annuler</span>
@@ -242,8 +275,13 @@ export default function Profile() {
                           value={formData.firstName}
                           onChange={handleChange}
                           disabled={!editing}
-                          className="pl-10 w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                          className={`pl-10 w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 ${
+                            errors.firstName ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {errors.firstName && (
+                          <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>
+                        )}
                       </div>
                     </div>
 
@@ -257,8 +295,13 @@ export default function Profile() {
                           value={formData.lastName}
                           onChange={handleChange}
                           disabled={!editing}
-                          className="pl-10 w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                          className={`pl-10 w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 ${
+                            errors.lastName ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {errors.lastName && (
+                          <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
+                        )}
                       </div>
                     </div>
 
@@ -272,8 +315,13 @@ export default function Profile() {
                           value={formData.email}
                           onChange={handleChange}
                           disabled={!editing}
-                          className="pl-10 w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                          className={`pl-10 w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 ${
+                            errors.email ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {errors.email && (
+                          <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                        )}
                       </div>
                     </div>
 
@@ -288,8 +336,13 @@ export default function Profile() {
                           onChange={handleChange}
                           disabled={!editing}
                           placeholder="+33 1 23 45 67 89"
-                          className="pl-10 w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
+                          className={`pl-10 w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 ${
+                            errors.phone ? 'border-red-300' : 'border-gray-300'
+                          }`}
                         />
+                        {errors.phone && (
+                          <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                        )}
                       </div>
                     </div>
 
@@ -396,42 +449,14 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Actions supplémentaires */}
-              <div className="mt-8 pt-8 border-t border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Link
-                    href="/profile/change-password"
-                    className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-center"
-                  >
-                    <h4 className="font-medium text-gray-900">Changer le mot de passe</h4>
-                    <p className="text-sm text-gray-600 mt-1">Sécurisez votre compte</p>
-                  </Link>
-
-                  <Link
-                    href="/profile/download-data"
-                    className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-center"
-                  >
-                    <h4 className="font-medium text-gray-900">Télécharger mes données</h4>
-                    <p className="text-sm text-gray-600 mt-1">Export PDF/CSV</p>
-                  </Link>
-
-                  <button className="p-4 border border-red-200 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors text-center">
-                    <h4 className="font-medium text-red-900">Supprimer le compte</h4>
-                    <p className="text-sm text-red-600 mt-1">Action irréversible</p>
-                  </button>
-                </div>
+              {/* Developer Info */}
+              <div className="mt-8 pt-8 border-t border-gray-200 text-center text-gray-500">
+                <p className="text-sm">
+                  Profil utilisateur avec logique DB • Développé par msylla01 • 2025-10-01 16:59:35 UTC
+                </p>
               </div>
             </div>
           </motion.div>
-
-          {/* Developer Info */}
-          <div className="mt-8 text-center text-gray-500">
-            <p className="text-sm">
-              Profil utilisateur • Développé par msylla01 • 2025-10-01 16:30:22 UTC
-            </p>
-          </div>
         </main>
       </div>
     </>

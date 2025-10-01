@@ -7,35 +7,89 @@ export function useUser() {
   const router = useRouter()
 
   useEffect(() => {
+    verifyToken()
+  }, [])
+
+  const verifyToken = async () => {
     try {
       const token = localStorage.getItem('hotel_token')
-      const userData = localStorage.getItem('hotel_user')
       
-      if (!token || !userData) {
+      if (!token) {
         setUser(null)
         setLoading(false)
         return
       }
 
-      const parsedUser = JSON.parse(userData)
-      setUser(parsedUser)
+      console.log('🔐 Vérification token [msylla01] - 2025-10-01 17:27:03');
+
+      // Vérifier le token avec le backend
+      const response = await fetch('http://localhost:5000/api/auth/verify', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        console.log('✅ Token valide [msylla01]:', data.user.email)
+        setUser(data.user)
+        // Mettre à jour le localStorage avec les dernières données
+        localStorage.setItem('hotel_user', JSON.stringify(data.user))
+      } else {
+        console.log('❌ Token invalide [msylla01]:', data.message)
+        // Token invalide, nettoyer le localStorage
+        localStorage.removeItem('hotel_token')
+        localStorage.removeItem('hotel_user')
+        setUser(null)
+      }
     } catch (error) {
-      console.error('Erreur parsing user data:', error)
+      console.error('❌ Erreur vérification token [msylla01]:', error)
+      // En cas d'erreur, nettoyer le localStorage
       localStorage.removeItem('hotel_token')
       localStorage.removeItem('hotel_user')
       setUser(null)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
-  const login = (token, userData) => {
-    localStorage.setItem('hotel_token', token)
-    localStorage.setItem('hotel_user', JSON.stringify(userData))
-    setUser(userData)
+  const login = async (email, password) => {
+    try {
+      setLoading(true)
+      
+      console.log('🔐 Tentative connexion [msylla01]:', email)
+      
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        console.log('✅ Connexion réussie [msylla01]:', data.user.email)
+        localStorage.setItem('hotel_token', data.token)
+        localStorage.setItem('hotel_user', JSON.stringify(data.user))
+        setUser(data.user)
+        return { success: true, user: data.user }
+      } else {
+        console.log('❌ Connexion échouée [msylla01]:', data.message)
+        return { success: false, error: data.message, field: data.field }
+      }
+    } catch (error) {
+      console.error('❌ Erreur connexion [msylla01]:', error)
+      return { success: false, error: 'Erreur de connexion' }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const logout = () => {
+    console.log('🚪 Déconnexion [msylla01]')
     localStorage.removeItem('hotel_token')
     localStorage.removeItem('hotel_user')
     setUser(null)
@@ -72,6 +126,7 @@ export function useUser() {
     updateUser,
     requireAuth,
     requireAdmin,
+    verifyToken,
     isAuthenticated: !!user,
     isAdmin: user?.role === 'ADMIN'
   }

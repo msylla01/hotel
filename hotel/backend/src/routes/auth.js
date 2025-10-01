@@ -10,10 +10,9 @@ const prisma = new PrismaClient();
 // Schemas de validation
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
   firstName: Joi.string().min(2).max(50).required(),
-  lastName: Joi.string().min(2).max(50).required(),
-  phone: Joi.string().optional(),
-  password: Joi.string().min(6).required()
+  lastName: Joi.string().min(2).max(50).required()
 });
 
 const loginSchema = Joi.object({
@@ -21,72 +20,89 @@ const loginSchema = Joi.object({
   password: Joi.string().required()
 });
 
-// Génération du token JWT
-const generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-};
-
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
+    console.log('📝 Tentative inscription [msylla01]:', req.body.email);
+
     const { error } = registerSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: error.details[0].message,
+        field: error.details[0].path[0],
         timestamp: new Date().toISOString()
       });
     }
 
-    const { email, firstName, lastName, phone, password } = req.body;
+    const { email, password, firstName, lastName } = req.body;
 
-    const existingUser = await prisma.user.findUnique({ 
-      where: { email: email.toLowerCase() } 
+    // Vérifier si l'utilisateur existe déjà
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
     });
-    
+
     if (existingUser) {
-      return res.status(409).json({ 
+      return res.status(409).json({
+        success: false,
         message: 'Un compte avec cet email existe déjà',
+        field: 'email',
         timestamp: new Date().toISOString()
       });
     }
 
+    // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Créer l'utilisateur
     const user = await prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email,
+        password: hashedPassword,
         firstName,
         lastName,
-        phone,
-        password: hashedPassword
+        role: 'CLIENT',
+        isActive: true,
+        emailVerified: false
       },
-      select: { 
-        id: true, 
-        email: true, 
-        firstName: true, 
-        lastName: true, 
-        phone: true,
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
         role: true,
+        isActive: true,
         createdAt: true
       }
     });
 
-    const token = generateToken(user.id);
+    // Générer le token JWT
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email,
+        role: user.role 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('✅ Inscription réussie [msylla01]:', user.email);
 
     res.status(201).json({
-      message: 'Inscription réussie !',
+      success: true,
+      message: 'Compte créé avec succès',
       token,
       user,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
     });
+
   } catch (error) {
-    console.error('Erreur inscription:', error);
-    res.status(500).json({ 
-      message: 'Erreur lors de l\'inscription',
+    console.error('❌ Erreur inscription [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la création du compte',
       timestamp: new Date().toISOString()
     });
   }
@@ -95,57 +111,176 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
+    console.log('🔐 Tentative connexion [msylla01] - 2025-10-01 17:27:03:', req.body.email);
+
     const { error } = loginSchema.validate(req.body);
     if (error) {
-      return res.status(400).json({ 
+      return res.status(400).json({
+        success: false,
         message: error.details[0].message,
+        field: error.details[0].path[0],
         timestamp: new Date().toISOString()
       });
     }
 
     const { email, password } = req.body;
 
-    const user = await prisma.user.findUnique({ 
-      where: { email: email.toLowerCase() }
+    // Rechercher l'utilisateur
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        birthDate: true,
+        preferences: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
-    
-    if (!user || !user.isActive) {
-      return res.status(401).json({ 
+
+    if (!user) {
+      console.log('❌ Utilisateur non trouvé [msylla01]:', email);
+      return res.status(401).json({
+        success: false,
         message: 'Email ou mot de passe incorrect',
+        field: 'email',
         timestamp: new Date().toISOString()
       });
     }
 
+    if (!user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Compte désactivé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier le mot de passe
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
-      return res.status(401).json({ 
+      console.log('❌ Mot de passe incorrect [msylla01]:', email);
+      return res.status(401).json({
+        success: false,
         message: 'Email ou mot de passe incorrect',
+        field: 'password',
         timestamp: new Date().toISOString()
       });
     }
 
-    const token = generateToken(user.id);
+    // Générer le token JWT avec plus d'infos
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        email: user.email,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
+    // Retourner les données utilisateur (sans le mot de passe)
     const userResponse = {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       phone: user.phone,
+      address: user.address,
+      birthDate: user.birthDate,
+      preferences: user.preferences,
       role: user.role,
-      avatar: user.avatar
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
     };
 
+    console.log('✅ Connexion réussie [msylla01]:', user.email, 'Token généré');
+
     res.json({
-      message: `Bienvenue ${user.firstName} !`,
+      success: true,
+      message: 'Connexion réussie',
       token,
       user: userResponse,
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur connexion [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la connexion',
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+// GET /api/auth/verify - Vérifier le token
+router.get('/verify', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token manquant',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        birthDate: true,
+        preferences: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token invalide ou compte désactivé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log('✅ Token vérifié [msylla01]:', user.email);
+
+    res.json({
+      success: true,
+      user,
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
   } catch (error) {
-    console.error('Erreur connexion:', error);
-    res.status(500).json({ 
-      message: 'Erreur lors de la connexion',
+    console.error('❌ Erreur vérification token [msylla01]:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Token invalide',
       timestamp: new Date().toISOString()
     });
   }

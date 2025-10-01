@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,99 +11,108 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  firstName String
-  lastName  String
-  phone     String?
-  password  String
-  role      Role     @default(CLIENT)
-  avatar    String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  firstName         String?
+  lastName          String?
+  phone             String?   // NOUVEAU CHAMP
+  address           String?   // NOUVEAU CHAMP  
+  birthDate         DateTime? // NOUVEAU CHAMP
+  preferences       Json?     // NOUVEAU CHAMP pour stocker les préférences
+  role              Role      @default(CLIENT)
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  bookings Booking[]
-  reviews  Review[]
+  // Relations
+  bookings          Booking[]
+  reviews           Review[]
 
   @@map("users")
 }
 
 model Room {
-  id          String   @id @default(cuid())
-  name        String
-  type        RoomType
-  price       Float
-  description String?
-  capacity    Int
-  size        Float?
-  amenities   String[]
-  images      String[]
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  type            RoomType
+  price           Float
+  capacity        Int
+  size            Float?
+  images          String[]  @default([])
+  amenities       String[]  @default([])
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  bookings Booking[]
-  reviews  Review[]
+  // Relations
+  bookings        Booking[]
+  reviews         Review[]
 
   @@map("rooms")
 }
 
 model Booking {
-  id          String        @id @default(cuid())
-  checkIn     DateTime
-  checkOut    DateTime
-  guests      Int
-  totalAmount Float
-  status      BookingStatus @default(PENDING)
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  userId          String
+  roomId          String
+  checkIn         DateTime
+  checkOut        DateTime
+  guests          Int
+  totalAmount     Float
+  status          BookingStatus @default(PENDING)
+  specialRequests String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-  roomId String
-  room   Room   @relation(fields: [roomId], references: [id])
-
-  payment Payment?
+  // Relations
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  payment         Payment[]
 
   @@map("bookings")
 }
 
 model Payment {
-  id            String        @id @default(cuid())
-  amount        Float
-  currency      String        @default("EUR")
-  method        PaymentMethod
-  status        PaymentStatus @default(PENDING)
-  stripeId      String?
-  paypalId      String?
-  transactionId String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String        @id @default(cuid())
+  bookingId       String
+  amount          Float
+  currency        String        @default("EUR")
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  transactionId   String?
+  stripeId        String?
+  paypalId        String?
+  errorMessage    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  bookingId String  @unique
-  booking   Booking @relation(fields: [bookingId], references: [id])
+  // Relations
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
 
 model Review {
-  id        String   @id @default(cuid())
-  rating    Int
-  comment   String?
-  isApproved Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  roomId          String
+  rating          Int       // 1 à 5 étoiles
+  comment         String?
+  isApproved      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-  roomId String
-  room   Room   @relation(fields: [roomId], references: [id])
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room            Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@map("reviews")
 }
 
+// Enums
 enum Role {
   CLIENT
   ADMIN
@@ -118,9 +130,10 @@ enum RoomType {
 enum BookingStatus {
   PENDING
   CONFIRMED
+  CANCELLED
   CHECKED_IN
   CHECKED_OUT
-  CANCELLED
+  COMPLETED
 }
 
 enum PaymentMethod {
@@ -135,5 +148,6 @@ enum PaymentStatus {
   PENDING
   COMPLETED
   FAILED
+  CANCELLED
   REFUNDED
 }
