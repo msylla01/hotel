@@ -428,3 +428,238 @@ router.delete('/account', authenticateToken, async (req, res) => {
     });
   }
 });
+
+// PUT /api/users/deactivate - Désactiver temporairement le compte
+router.put('/deactivate', authenticateToken, async (req, res) => {
+  try {
+    console.log('⏸️ Désactivation temporaire compte [msylla01] - 2025-10-01 17:47:22:', req.user.id);
+
+    const { password, reason } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mot de passe requis pour confirmer la désactivation',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Récupérer l'utilisateur avec le mot de passe
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier le mot de passe
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mot de passe incorrect',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier s'il y a des réservations confirmées à venir
+    const upcomingBookings = await prisma.booking.findMany({
+      where: {
+        userId: req.user.id,
+        status: 'CONFIRMED',
+        checkIn: { gte: new Date() }
+      },
+      include: {
+        room: { select: { name: true } }
+      }
+    });
+
+    if (upcomingBookings.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Vous avez ${upcomingBookings.length} réservation(s) confirmée(s) à venir. Veuillez les annuler ou attendre leur completion avant la désactivation.`,
+        upcomingBookings: upcomingBookings.map(b => ({
+          id: b.id,
+          roomName: b.room.name,
+          checkIn: b.checkIn,
+          checkOut: b.checkOut
+        })),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Désactiver temporairement le compte
+    const deactivatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: {
+        isActive: false,
+        // Stocker les infos de désactivation dans preferences
+        preferences: {
+          ...user.preferences,
+          deactivation: {
+            reason: reason || 'Désactivation volontaire',
+            date: new Date().toISOString(),
+            type: 'temporary'
+          }
+        },
+        updatedAt: new Date()
+      }
+    });
+
+    console.log('✅ Compte désactivé temporairement [msylla01]:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Compte désactivé temporairement avec succès',
+      deactivationInfo: {
+        reason: reason || 'Désactivation volontaire',
+        date: new Date().toISOString(),
+        canReactivate: true
+      },
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur désactivation temporaire [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la désactivation du compte',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// PUT /api/users/reactivate - Réactiver le compte
+router.put('/reactivate', async (req, res) => {
+  try {
+    console.log('▶️ Réactivation compte [msylla01] - 2025-10-01 17:47:22');
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email et mot de passe requis',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Trouver l'utilisateur désactivé
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun compte trouvé avec cet email',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte est déjà actif',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier que c'est une désactivation temporaire
+    const deactivationInfo = user.preferences?.deactivation;
+    if (!deactivationInfo || deactivationInfo.type !== 'temporary') {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte ne peut pas être réactivé (suppression définitive)',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier le mot de passe
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Mot de passe incorrect',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Réactiver le compte
+    const reactivatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isActive: true,
+        preferences: {
+          ...user.preferences,
+          reactivation: {
+            date: new Date().toISOString(),
+            previousDeactivation: deactivationInfo
+          },
+          // Supprimer les infos de désactivation
+          deactivation: undefined
+        },
+        updatedAt: new Date()
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        birthDate: true,
+        preferences: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    // Générer un nouveau token
+    const token = jwt.sign(
+      { 
+        userId: reactivatedUser.id, 
+        email: reactivatedUser.email,
+        role: reactivatedUser.role,
+        firstName: reactivatedUser.firstName,
+        lastName: reactivatedUser.lastName
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('✅ Compte réactivé [msylla01]:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Compte réactivé avec succès ! Bon retour parmi nous !',
+      token,
+      user: reactivatedUser,
+      reactivationInfo: {
+        date: new Date().toISOString(),
+        deactivatedSince: deactivationInfo.date
+      },
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur réactivation compte [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la réactivation du compte',
+      timestamp: new Date().toISOString()
+    });
+  }
+});

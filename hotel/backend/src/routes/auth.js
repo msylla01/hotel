@@ -7,12 +7,15 @@ const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Schemas de validation
+// Schemas de validation CORRIGÉS
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   firstName: Joi.string().min(2).max(50).required(),
-  lastName: Joi.string().min(2).max(50).required()
+  lastName: Joi.string().min(2).max(50).required(),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional().allow(''), // AJOUTÉ
+  address: Joi.string().max(200).optional().allow(''), // AJOUTÉ
+  birthDate: Joi.date().optional().allow(null) // AJOUTÉ
 });
 
 const loginSchema = Joi.object({
@@ -23,10 +26,11 @@ const loginSchema = Joi.object({
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    console.log('📝 Tentative inscription [msylla01]:', req.body.email);
+    console.log('📝 Tentative inscription [msylla01] - 2025-10-01 17:54:35:', req.body.email);
 
     const { error } = registerSchema.validate(req.body);
     if (error) {
+      console.log('❌ Erreur validation inscription [msylla01]:', error.details[0].message);
       return res.status(400).json({
         success: false,
         message: error.details[0].message,
@@ -35,7 +39,7 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const { email, password, firstName, lastName } = req.body;
+    const { email, password, firstName, lastName, phone, address, birthDate } = req.body;
 
     // Vérifier si l'utilisateur existe déjà
     const existingUser = await prisma.user.findUnique({
@@ -54,22 +58,40 @@ router.post('/register', async (req, res) => {
     // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Préparer les données de création
+    const userData = {
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      role: 'CLIENT',
+      isActive: true,
+      emailVerified: false
+    };
+
+    // Ajouter les champs optionnels s'ils sont fournis
+    if (phone && phone.trim()) {
+      userData.phone = phone.trim();
+    }
+    if (address && address.trim()) {
+      userData.address = address.trim();
+    }
+    if (birthDate) {
+      userData.birthDate = new Date(birthDate);
+    }
+
     // Créer l'utilisateur
     const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        firstName,
-        lastName,
-        role: 'CLIENT',
-        isActive: true,
-        emailVerified: false
-      },
+      data: userData,
       select: {
         id: true,
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
+        address: true,
+        birthDate: true,
+        preferences: true,
         role: true,
         isActive: true,
         createdAt: true
@@ -81,7 +103,9 @@ router.post('/register', async (req, res) => {
       { 
         userId: user.id, 
         email: user.email,
-        role: user.role 
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -103,6 +127,7 @@ router.post('/register', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la création du compte',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur serveur',
       timestamp: new Date().toISOString()
     });
   }
@@ -111,7 +136,7 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
-    console.log('🔐 Tentative connexion [msylla01] - 2025-10-01 17:27:03:', req.body.email);
+    console.log('🔐 Tentative connexion [msylla01] - 2025-10-01 17:54:35:', req.body.email);
 
     const { error } = loginSchema.validate(req.body);
     if (error) {
@@ -158,7 +183,8 @@ router.post('/login', async (req, res) => {
     if (!user.isActive) {
       return res.status(401).json({
         success: false,
-        message: 'Compte désactivé',
+        message: 'Compte désactivé. Utilisez la fonction de réactivation.',
+        reactivationAvailable: true,
         timestamp: new Date().toISOString()
       });
     }
@@ -263,6 +289,7 @@ router.get('/verify', async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Token invalide ou compte désactivé',
+        reactivationAvailable: user && !user.isActive,
         timestamp: new Date().toISOString()
       });
     }

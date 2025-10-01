@@ -14,7 +14,8 @@ import {
   CheckIcon,
   XMarkIcon,
   TrashIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  PauseIcon
 } from '@heroicons/react/24/outline'
 import { useProfile } from '../hooks/useProfile'
 
@@ -97,7 +98,7 @@ export default function Profile() {
       setErrors({})
       setSuccess('')
       
-      console.log('💾 Sauvegarde profil [msylla01] - 2025-10-01 17:42:14:', formData)
+      console.log('💾 Sauvegarde profil [msylla01] - 2025-10-01 17:49:31:', formData)
       
       const result = await updateProfile(formData)
       
@@ -455,7 +456,7 @@ export default function Profile() {
               <div className="mt-8 pt-8 border-t border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions du compte</h3>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Link
                     href="/profile/change-password"
                     className="p-4 border border-blue-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors text-center group"
@@ -465,12 +466,21 @@ export default function Profile() {
                     <p className="text-sm text-blue-700 mt-1">Sécurisez votre compte</p>
                   </Link>
 
+                  <Link
+                    href="/profile/deactivate-account"
+                    className="p-4 border border-orange-200 rounded-lg hover:border-orange-300 hover:bg-orange-50 transition-colors text-center group"
+                  >
+                    <PauseIcon className="w-6 h-6 text-orange-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
+                    <h4 className="font-medium text-orange-900">Désactiver temporairement</h4>
+                    <p className="text-sm text-orange-700 mt-1">Pause réversible</p>
+                  </Link>
+
                   <button 
                     onClick={() => router.push('/profile/delete-account')}
                     className="p-4 border border-red-200 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors text-center group"
                   >
                     <TrashIcon className="w-6 h-6 text-red-600 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <h4 className="font-medium text-red-900">Supprimer le compte</h4>
+                    <h4 className="font-medium text-red-900">Supprimer définitivement</h4>
                     <p className="text-sm text-red-700 mt-1">Action irréversible</p>
                   </button>
                 </div>
@@ -500,7 +510,7 @@ export default function Profile() {
               {/* Developer Info */}
               <div className="mt-8 pt-8 border-t border-gray-200 text-center text-gray-500">
                 <p className="text-sm">
-                  Profil utilisateur avec gestion complète • Développé par msylla01 • 2025-10-01 17:42:14 UTC
+                  Profil utilisateur avec gestion complète • Développé par msylla01 • 2025-10-01 17:49:31 UTC
                 </p>
               </div>
             </div>
