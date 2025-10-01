@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const app = express();
 
-console.log('🔄 Initialisation du serveur Hotel Management API [msylla01] - 2025-10-01 15:52:59...');
+console.log('🔄 Initialisation du serveur Hotel Management API [msylla01]...');
 
 // Middleware de base
 app.use(helmet());
@@ -29,8 +29,6 @@ try {
   const bookingRoutes = require('./routes/bookings');
   const paymentRoutes = require('./routes/payments');
   const adminRoutes = require('./routes/admin');
-  const emailRoutes = require('./routes/emails');
-  const chatbotRoutes = require('./routes/chatbot');
   
   const { authenticateToken } = require('./middleware/auth');
   const errorHandler = require('./middleware/errorHandler');
@@ -38,20 +36,18 @@ try {
   // Routes publiques
   app.use('/api/auth', authRoutes);
   app.use('/api/rooms', roomRoutes);
-  app.use('/api/chatbot', chatbotRoutes);
 
   // Routes protégées
   app.use('/api/bookings', authenticateToken, bookingRoutes);
   app.use('/api/payments', authenticateToken, paymentRoutes);
   app.use('/api/admin', authenticateToken, adminRoutes);
-  app.use('/api/emails', authenticateToken, emailRoutes);
 
   // Error handling
   app.use(errorHandler);
 
-  console.log('✅ Routes chargées avec succès [msylla01]');
+  console.log('✅ Routes chargées avec succès');
 } catch (error) {
-  console.error('❌ Erreur lors du chargement des routes [msylla01]:', error);
+  console.error('❌ Erreur lors du chargement des routes:', error);
 }
 
 // Health check
@@ -61,31 +57,25 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     developer: 'msylla01',
-    version: '1.0.0',
-    services: {
-      payments: 'Stripe Active',
-      emails: 'Nodemailer Ready',
-      chatbot: 'IA Active',
-      database: 'PostgreSQL Connected'
-    }
+    version: '1.0.0'
   });
 });
 
 // API Info
 app.get('/api', (req, res) => {
   res.json({
-    name: 'Hotel Management API ��',
+    name: 'Hotel Management API 🏨',
     version: '1.0.0',
     developer: 'msylla01',
     timestamp: new Date().toISOString(),
-    services: ['Paiements', 'Emails', 'Chatbot IA'],
-    endpoints: {
-      auth: 'POST /api/auth/login',
-      rooms: 'GET /api/rooms',
-      payments: 'POST /api/payments/create-intent',
-      emails: 'POST /api/emails/test',
-      chatbot: 'POST /api/chatbot/message'
-    }
+    endpoints: [
+      'GET /health',
+      'GET /api',
+      'POST /api/auth/register',
+      'POST /api/auth/login', 
+      'GET /api/rooms',
+      'GET /api/rooms/:id'
+    ]
   });
 });
 
@@ -101,14 +91,19 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log('\n🎉 ===== SERVEUR HOTEL LUXE DÉMARRÉ =====');
+  console.log('\n🎉 ===== SERVEUR DÉMARRÉ =====');
   console.log(`🚀 Port: ${PORT}`);
   console.log(`🔗 API: http://localhost:${PORT}/api`);
   console.log(`🏥 Health: http://localhost:${PORT}/health`);
   console.log(`👤 Dev: msylla01`);
   console.log(`⏰ ${new Date().toISOString()}`);
-  console.log(`🎯 Services: Paiements + Emails + Chatbot IA`);
-  console.log('=========================================\n');
+  console.log('==============================\n');
 });
 
 module.exports = app;
+
+app.use('/api/emails', require('./src/routes/emails'));
+
+
+app.use('/api/chatbot', require('./src/routes/chatbot'));
+

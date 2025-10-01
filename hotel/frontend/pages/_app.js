@@ -1,10 +1,12 @@
 import '../styles/globals.css'
 import { Toaster } from 'react-hot-toast'
+import Chatbot from '../components/chatbot/Chatbot'
 
 export default function App({ Component, pageProps }) {
   return (
     <>
       <Component {...pageProps} />
+      <Chatbot />
       <Toaster 
         position="top-right"
         toastOptions={{
