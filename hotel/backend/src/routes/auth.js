@@ -7,15 +7,15 @@ const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Schemas de validation CORRIGÉS
+// Schemas de validation
 const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   firstName: Joi.string().min(2).max(50).required(),
   lastName: Joi.string().min(2).max(50).required(),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional().allow(''), // AJOUTÉ
-  address: Joi.string().max(200).optional().allow(''), // AJOUTÉ
-  birthDate: Joi.date().optional().allow(null) // AJOUTÉ
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).optional().allow(''),
+  address: Joi.string().max(200).optional().allow(''),
+  birthDate: Joi.date().optional().allow(null)
 });
 
 const loginSchema = Joi.object({
@@ -23,10 +23,15 @@ const loginSchema = Joi.object({
   password: Joi.string().required()
 });
 
+const reactivateSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required()
+});
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    console.log('📝 Tentative inscription [msylla01] - 2025-10-01 17:54:35:', req.body.email);
+    console.log('📝 Tentative inscription [msylla01] - 2025-10-01 18:09:15:', req.body.email);
 
     const { error } = registerSchema.validate(req.body);
     if (error) {
@@ -136,7 +141,7 @@ router.post('/register', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   try {
-    console.log('🔐 Tentative connexion [msylla01] - 2025-10-01 17:54:35:', req.body.email);
+    console.log('🔐 Tentative connexion [msylla01] - 2025-10-01 18:09:15:', req.body.email);
 
     const { error } = loginSchema.validate(req.body);
     if (error) {
@@ -150,7 +155,7 @@ router.post('/login', async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Rechercher l'utilisateur
+    // Rechercher l'utilisateur (MÊME S'IL EST DÉSACTIVÉ)
     const user = await prisma.user.findUnique({
       where: { email },
       select: {
@@ -180,15 +185,6 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    if (!user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'Compte désactivé. Utilisez la fonction de réactivation.',
-        reactivationAvailable: true,
-        timestamp: new Date().toISOString()
-      });
-    }
-
     // Vérifier le mot de passe
     const isValidPassword = await bcrypt.compare(password, user.password);
     if (!isValidPassword) {
@@ -201,14 +197,24 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Générer le token JWT avec plus d'infos
+    // Vérifier si c'est une suppression définitive (email modifié)
+    if (user.email.includes('deleted_')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Ce compte a été supprimé définitivement',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Générer le token JWT (MÊME POUR COMPTE DÉSACTIVÉ)
     const token = jwt.sign(
       { 
         userId: user.id, 
         email: user.email,
         role: user.role,
         firstName: user.firstName,
-        lastName: user.lastName
+        lastName: user.lastName,
+        isActive: user.isActive
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -230,13 +236,23 @@ router.post('/login', async (req, res) => {
       updatedAt: user.updatedAt
     };
 
-    console.log('✅ Connexion réussie [msylla01]:', user.email, 'Token généré');
+    // Message différent selon le statut
+    const message = user.isActive 
+      ? 'Connexion réussie' 
+      : 'Connexion réussie - Compte temporairement désactivé';
+
+    console.log('✅ Connexion réussie [msylla01]:', user.email, 'Active:', user.isActive);
 
     res.json({
       success: true,
-      message: 'Connexion réussie',
+      message,
       token,
       user: userResponse,
+      accountStatus: {
+        isActive: user.isActive,
+        canReactivate: !user.isActive && user.preferences?.deactivation?.type === 'temporary',
+        deactivationInfo: user.preferences?.deactivation || null
+      },
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });
@@ -251,7 +267,148 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/verify - Vérifier le token
+// PUT /api/auth/reactivate - ROUTE PUBLIQUE (pas de token requis)
+router.put('/reactivate', async (req, res) => {
+  try {
+    console.log('▶️ Tentative réactivation [msylla01] - 2025-10-01 18:09:15');
+
+    const { error } = reactivateSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.details[0].message,
+        field: error.details[0].path[0],
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const { email, password } = req.body;
+
+    // Trouver l'utilisateur (même désactivé)
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun compte trouvé avec cet email',
+        field: 'email',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier si c'est une suppression définitive
+    if (user.email.includes('deleted_')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte a été supprimé définitivement et ne peut pas être réactivé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (user.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte est déjà actif',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier que c'est une désactivation temporaire
+    const deactivationInfo = user.preferences?.deactivation;
+    if (!deactivationInfo || deactivationInfo.type !== 'temporary') {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce compte ne peut pas être réactivé automatiquement. Contactez le support.',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Vérifier le mot de passe
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Mot de passe incorrect',
+        field: 'password',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Réactiver le compte
+    const reactivatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isActive: true,
+        preferences: {
+          ...user.preferences,
+          reactivation: {
+            date: new Date().toISOString(),
+            previousDeactivation: deactivationInfo
+          },
+          // Supprimer les infos de désactivation
+          deactivation: undefined
+        },
+        updatedAt: new Date()
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        birthDate: true,
+        preferences: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    // Générer un nouveau token
+    const token = jwt.sign(
+      { 
+        userId: reactivatedUser.id, 
+        email: reactivatedUser.email,
+        role: reactivatedUser.role,
+        firstName: reactivatedUser.firstName,
+        lastName: reactivatedUser.lastName,
+        isActive: reactivatedUser.isActive
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log('✅ Compte réactivé [msylla01]:', user.email);
+
+    res.json({
+      success: true,
+      message: 'Compte réactivé avec succès ! Bon retour parmi nous ! 🎉',
+      token,
+      user: reactivatedUser,
+      reactivationInfo: {
+        date: new Date().toISOString(),
+        deactivatedSince: deactivationInfo.date,
+        wasDeactivatedFor: Math.floor((new Date() - new Date(deactivationInfo.date)) / (1000 * 60 * 60 * 24)) + ' jour(s)'
+      },
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur réactivation compte [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la réactivation du compte',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /api/auth/verify - Vérifier le token (AUTORISE COMPTES DÉSACTIVÉS)
 router.get('/verify', async (req, res) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -285,20 +442,33 @@ router.get('/verify', async (req, res) => {
       }
     });
 
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Token invalide ou compte désactivé',
-        reactivationAvailable: user && !user.isActive,
+        message: 'Utilisateur non trouvé',
         timestamp: new Date().toISOString()
       });
     }
 
-    console.log('✅ Token vérifié [msylla01]:', user.email);
+    // Vérifier si c'est une suppression définitive
+    if (user.email.includes('deleted_')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Compte supprimé définitivement',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log('✅ Token vérifié [msylla01]:', user.email, 'Active:', user.isActive);
 
     res.json({
       success: true,
       user,
+      accountStatus: {
+        isActive: user.isActive,
+        canReactivate: !user.isActive && user.preferences?.deactivation?.type === 'temporary',
+        deactivationInfo: user.preferences?.deactivation || null
+      },
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });

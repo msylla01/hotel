@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -9,7 +9,8 @@ import {
   LockClosedIcon,
   ExclamationCircleIcon,
   EyeIcon,
-  EyeSlashIcon
+  EyeSlashIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline'
 
 export default function ReactivateAccount() {
@@ -19,8 +20,27 @@ export default function ReactivateAccount() {
     password: ''
   })
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const [errors, setErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    // Pré-remplir l'email si l'utilisateur est déjà connecté
+    try {
+      const userData = localStorage.getItem('hotel_user')
+      if (userData) {
+        const user = JSON.parse(userData)
+        if (!user.isActive) {
+          setFormData(prev => ({ ...prev, email: user.email }))
+        } else {
+          // Si le compte est déjà actif, rediriger vers le dashboard
+          router.push('/dashboard')
+        }
+      }
+    } catch (error) {
+      console.log('Pas d\'utilisateur connecté')
+    }
+  }, [router])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -54,9 +74,9 @@ export default function ReactivateAccount() {
       setLoading(true)
       setErrors({})
       
-      console.log('▶️ Tentative réactivation [msylla01] - 2025-10-01 17:47:22:', formData.email)
+      console.log('▶️ Tentative réactivation [msylla01] - 2025-10-01 18:15:36:', formData.email)
       
-      const response = await fetch('http://localhost:5000/api/users/reactivate', {
+      const response = await fetch('http://localhost:5000/api/auth/reactivate', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -69,12 +89,17 @@ export default function ReactivateAccount() {
       if (data.success) {
         console.log('✅ Compte réactivé [msylla01]:', data.user.email)
         
+        setSuccess(true)
+        
         // Sauvegarder le token et les données utilisateur
         localStorage.setItem('hotel_token', data.token)
         localStorage.setItem('hotel_user', JSON.stringify(data.user))
         
-        // Redirection vers le dashboard
-        router.push('/dashboard?reactivated=true')
+        // Redirection vers le dashboard avec paramètre de réactivation
+        setTimeout(() => {
+          router.push('/dashboard?reactivated=true')
+        }, 3000)
+        
       } else {
         if (data.field) {
           setErrors({ [data.field]: data.message })
@@ -88,6 +113,42 @@ export default function ReactivateAccount() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Affichage du succès
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center"
+        >
+          <CheckCircleIcon className="w-16 h-16 text-green-600 mx-auto mb-4" />
+          
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Compte réactivé avec succès ! 🎉
+          </h1>
+          
+          <p className="text-gray-600 mb-6">
+            Bienvenue de retour ! Votre compte est maintenant actif et vous avez accès à toutes les fonctionnalités.
+          </p>
+
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <p className="text-green-700 text-sm">
+              Redirection automatique vers votre dashboard dans quelques secondes...
+            </p>
+          </div>
+
+          <Link
+            href="/dashboard"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors block"
+          >
+            Aller au dashboard maintenant
+          </Link>
+        </motion.div>
+      </div>
+    )
   }
 
   return (
@@ -200,7 +261,7 @@ export default function ReactivateAccount() {
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Réactivation...</span>
+                  <span>Réactivation en cours...</span>
                 </>
               ) : (
                 <>
@@ -232,7 +293,7 @@ export default function ReactivateAccount() {
           {/* Footer */}
           <div className="mt-8 text-center text-xs text-gray-500">
             <p>Réactivation de compte • Développé par msylla01</p>
-            <p>2025-10-01 17:47:22 UTC</p>
+            <p>2025-10-01 18:15:36 UTC</p>
           </div>
         </motion.div>
       </div>
