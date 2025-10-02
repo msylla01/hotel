@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 const authenticateToken = async (req, res, next) => {
   try {
-    console.log('🔐 Vérification token [msylla01] - 2025-10-01 17:27:03');
+    console.log('🔐 Vérification token [msylla01] - 2025-10-02 00:31:15');
     
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -35,7 +35,8 @@ const authenticateToken = async (req, res, next) => {
         firstName: true,
         lastName: true,
         role: true,
-        isActive: true
+        isActive: true,
+        preferences: true
       }
     });
 
@@ -48,17 +49,28 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive) {
-      console.log('❌ Compte désactivé [msylla01]:', user.email);
+    // Vérifier si c'est une suppression définitive
+    if (user.email.includes('deleted_')) {
+      console.log('❌ Compte supprimé définitivement [msylla01]:', user.email);
       return res.status(401).json({
         success: false,
-        message: 'Compte désactivé',
+        message: 'Compte supprimé définitivement',
         timestamp: new Date().toISOString()
       });
     }
 
-    console.log('✅ Authentification réussie [msylla01]:', user.email);
-    req.user = user;
+    console.log('✅ Authentification réussie [msylla01]:', user.email, 'Active:', user.isActive);
+    
+    // Ajouter les infos de statut
+    req.user = {
+      ...user,
+      accountStatus: {
+        isActive: user.isActive,
+        canReactivate: !user.isActive && user.preferences?.deactivation?.type === 'temporary',
+        deactivationInfo: user.preferences?.deactivation || null
+      }
+    };
+    
     next();
 
   } catch (error) {
@@ -90,6 +102,20 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
+// Middleware pour vérifier que le compte est ACTIF (pour les actions sensibles)
+const requireActiveAccount = (req, res, next) => {
+  if (!req.user.isActive) {
+    return res.status(403).json({
+      success: false,
+      message: 'Compte temporairement désactivé. Réactivez votre compte pour continuer.',
+      code: 'ACCOUNT_DEACTIVATED',
+      canReactivate: req.user.accountStatus.canReactivate,
+      timestamp: new Date().toISOString()
+    });
+  }
+  next();
+};
+
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== 'ADMIN') {
     return res.status(403).json({
@@ -98,10 +124,21 @@ const requireAdmin = (req, res, next) => {
       timestamp: new Date().toISOString()
     });
   }
+  
+  // Vérifier que l'admin est actif
+  if (!req.user.isActive) {
+    return res.status(403).json({
+      success: false,
+      message: 'Compte administrateur désactivé',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   next();
 };
 
 module.exports = {
   authenticateToken,
+  requireActiveAccount,
   requireAdmin
 };

@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const app = express();
 
-console.log('🔄 Initialisation du serveur Hotel Management API [msylla01] - 2025-10-01 18:03:13...');
+console.log('🔄 Initialisation serveur Hotel Management API [msylla01] - 2025-10-02 00:27:12...');
 
 // Middleware de base
 app.use(helmet());
@@ -27,6 +27,7 @@ try {
   const authRoutes = require('./routes/auth');
   const roomRoutes = require('./routes/rooms');
   const bookingRoutes = require('./routes/bookings');
+  const favoritesRoutes = require('./routes/favorites'); // AJOUTÉ
   const paymentRoutes = require('./routes/payments');
   const adminRoutes = require('./routes/admin');
   const emailRoutes = require('./routes/emails');
@@ -43,6 +44,7 @@ try {
 
   // Routes qui nécessitent juste une authentification (même compte désactivé)
   app.use('/api/users', authenticateToken, userRoutes);
+  app.use('/api/favorites', authenticateToken, favoritesRoutes); // AJOUTÉ
 
   // Routes qui nécessitent un compte ACTIF
   app.use('/api/bookings', authenticateToken, requireActiveAccount, bookingRoutes);
@@ -55,9 +57,9 @@ try {
   // Error handling
   app.use(errorHandler);
 
-  console.log('✅ Routes chargées avec logique de désactivation [msylla01]');
+  console.log('✅ Routes chargées avec API favoris [msylla01]');
 } catch (error) {
-  console.error('❌ Erreur lors du chargement des routes [msylla01]:', error);
+  console.error('❌ Erreur chargement routes [msylla01]:', error);
 }
 
 // Health check
@@ -69,11 +71,13 @@ app.get('/health', (req, res) => {
     developer: 'msylla01',
     version: '1.0.0',
     services: {
+      rooms: 'API Rooms Active',
+      bookings: 'API Bookings Active',
+      favorites: 'API Favorites Active',
       payments: 'Stripe Active',
       emails: 'Nodemailer Ready',
       chatbot: 'IA Active',
-      database: 'PostgreSQL Connected',
-      deactivation: 'Temporary Deactivation Logic Active'
+      database: 'PostgreSQL Connected'
     }
   });
 });
@@ -85,11 +89,13 @@ app.get('/api', (req, res) => {
     version: '1.0.0',
     developer: 'msylla01',
     timestamp: new Date().toISOString(),
-    services: ['Paiements', 'Emails', 'Chatbot IA', 'Désactivation Temporaire'],
+    services: ['Chambres', 'Réservations', 'Favoris', 'Paiements', 'Emails', 'Chatbot'],
     endpoints: {
       auth: 'POST /api/auth/login',
-      rooms: 'GET /api/rooms',
+      rooms: 'GET /api/rooms (public)',
+      roomDetail: 'GET /api/rooms/:id (public)',
       bookings: 'GET /api/bookings (requires active account)',
+      favorites: 'GET /api/favorites (authenticated)',
       payments: 'POST /api/payments/create-intent (requires active account)',
       emails: 'POST /api/emails/test (requires active account)',
       chatbot: 'POST /api/chatbot/message',
@@ -114,10 +120,13 @@ app.listen(PORT, () => {
   console.log(`🚀 Port: ${PORT}`);
   console.log(`🔗 API: http://localhost:${PORT}/api`);
   console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log(`🏨 Rooms API: http://localhost:${PORT}/api/rooms`);
+  console.log(`📋 Bookings API: http://localhost:${PORT}/api/bookings`);
+  console.log(`❤️ Favorites API: http://localhost:${PORT}/api/favorites`);
   console.log(`👤 Dev: msylla01`);
   console.log(`⏰ ${new Date().toISOString()}`);
-  console.log(`🎯 Services: Paiements + Emails + Chatbot + Désactivation Temporaire`);
-  console.log('================================================\n');
+  console.log(`🎯 Services: Chambres + Réservations + Favoris + Paiements`);
+  console.log('===============================================\n');
 });
 
 module.exports = app;

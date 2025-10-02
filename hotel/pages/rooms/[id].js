@@ -51,185 +51,237 @@ export default function RoomDetail() {
     setUser(user)
     
     if (id) {
-      fetchRoomDetailFromAPI()
+      fetchRoomDetail()
     }
   }, [router, id])
 
-  const fetchRoomDetailFromAPI = async () => {
+  const fetchRoomDetail = async () => {
     try {
       setLoading(true)
       
-      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-02 00:09:18:', id)
+      console.log('🏨 Récupération détail chambre [msylla01] - 2025-10-01 23:59:11:', id)
       
-      const response = await fetch(`http://localhost:5000/api/rooms/${id}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          setRoom(data.room)
-          console.log('✅ Détail chambre API récupéré [msylla01]:', data.room.name)
-        } else {
-          console.error('❌ Erreur API rooms [msylla01]:', data.message)
-          // Fallback sur données simulées
-          fetchRoomDetailFallback()
+      // Simuler les données de chambre pour l'instant
+      const mockRooms = {
+        'room_1': {
+          id: 'room_1',
+          name: 'Chambre Simple Confort',
+          description: 'Une chambre élégante et fonctionnelle pour un séjour en solo. Parfaitement équipée avec un lit simple, un bureau et tout le confort moderne. Cette chambre offre un espace optimisé avec une décoration contemporaine et des équipements de qualité pour garantir votre confort.',
+          type: 'SINGLE',
+          price: 120,
+          capacity: 1,
+          size: 22,
+          images: [
+            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
+          ],
+          amenities: [
+            'WiFi gratuit haut débit',
+            'TV écran plat 43"',
+            'Climatisation individuelle',
+            'Coffre-fort numérique',
+            'Salle de bain privée avec douche',
+            'Minibar',
+            'Bureau de travail',
+            'Téléphone direct',
+            'Sèche-cheveux',
+            'Peignoir et chaussons',
+            'Produits de toilette premium',
+            'Service de ménage quotidien'
+          ],
+          rating: 4.2,
+          reviews: 45,
+          available: true,
+          features: [
+            'Lit simple 120cm',
+            'Espace bureau ergonomique',
+            'Dressing avec cintres',
+            'Éclairage LED réglable',
+            'Isolation phonique renforcée',
+            'Fenêtre avec vue dégagée'
+          ]
+        },
+        'room_2': {
+          id: 'room_2',
+          name: 'Chambre Double Prestige',
+          description: 'Spacieuse chambre double avec balcon privé offrant une vue imprenable. Idéale pour les couples recherchant confort et romantisme. Cette chambre dispose d\'un aménagement soigné avec des matériaux nobles et une attention particulière aux détails.',
+          type: 'DOUBLE',
+          price: 180,
+          capacity: 2,
+          size: 28,
+          images: [
+            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
+          ],
+          amenities: [
+            'WiFi gratuit haut débit',
+            'TV écran plat 50"',
+            'Climatisation individuelle',
+            'Balcon privé avec vue',
+            'Lit king size',
+            'Minibar premium',
+            'Coffre-fort numérique',
+            'Salle de bain avec baignoire',
+            'Peignoirs et chaussons',
+            'Service en chambre 24h/24',
+            'Machine à café Nespresso',
+            'Bouteille d\'eau offerte quotidiennement'
+          ],
+          rating: 4.5,
+          reviews: 128,
+          available: true,
+          features: [
+            'Lit king size 180cm',
+            'Balcon privé 6m²',
+            'Dressing spacieux',
+            'Coin salon avec fauteuils',
+            'Vue panoramique',
+            'Baignoire relaxante'
+          ]
+        },
+        'room_3': {
+          id: 'room_3',
+          name: 'Suite Junior Executive',
+          description: 'Suite élégante avec salon séparé, parfaite pour les voyages d\'affaires ou les séjours prolongés. Décoration raffinée et équipements haut de gamme. Cette suite offre un espace de vie et de travail optimal avec des prestations de luxe.',
+          type: 'SUITE',
+          price: 350,
+          capacity: 2,
+          size: 45,
+          images: [
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
+          ],
+          amenities: [
+            'WiFi gratuit haut débit',
+            'TV écran plat 55" + TV salon',
+            'Climatisation multi-zones',
+            'Salon séparé avec canapé',
+            'Bureau executive',
+            'Minibar premium',
+            'Machine à café Nespresso',
+            'Salle de bain avec douche italienne',
+            'Peignoirs et chaussons premium',
+            'Service butler disponible',
+            'Vue panoramique',
+            'Bouteille de champagne offerte',
+            'Accès prioritaire spa',
+            'Service pressing'
+          ],
+          rating: 4.8,
+          reviews: 89,
+          available: true,
+          features: [
+            'Salon séparé 15m²',
+            'Bureau executive équipé',
+            'Chambre avec dressing',
+            'Salle de bain marbre',
+            'Terrasse privée',
+            'Service butler'
+          ]
+        },
+        'room_4': {
+          id: 'room_4',
+          name: 'Chambre Familiale Spacieuse',
+          description: 'Chambre parfaite pour les familles avec enfants. Espace optimisé avec lits superposés et coin jeux pour le bonheur des petits et grands. Sécurité et confort sont nos priorités pour des vacances familiales réussies.',
+          type: 'FAMILY',
+          price: 250,
+          capacity: 4,
+          size: 40,
+          images: [
+            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
+            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
+          ],
+          amenities: [
+            'WiFi gratuit haut débit',
+            'TV écran plat 50"',
+            'Climatisation individuelle',
+            'Lit double parents',
+            'Lits superposés enfants',
+            'Coin jeux aménagé',
+            'Minibar adapté famille',
+            'Coffre-fort numérique',
+            'Salle de bain familiale',
+            'Kit de bienvenue enfants',
+            'Console de jeux',
+            'Balcon sécurisé',
+            'Réfrigérateur supplémentaire',
+            'Service baby-sitting sur demande'
+          ],
+          rating: 4.6,
+          reviews: 67,
+          available: true,
+          features: [
+            'Espace parents séparé',
+            'Coin enfants sécurisé',
+            'Jeux et livres fournis',
+            'Baignoire familiale',
+            'Balcon avec protection',
+            'Service baby-sitting'
+          ]
+        },
+        'room_5': {
+          id: 'room_5',
+          name: 'Suite Présidentielle Deluxe',
+          description: 'Notre suite la plus luxueuse avec jacuzzi privé, terrasse et service personnalisé. Une expérience inoubliable pour les occasions spéciales. Cette suite représente le summum du luxe avec des prestations exceptionnelles et un service sur mesure.',
+          type: 'DELUXE',
+          price: 450,
+          capacity: 2,
+          size: 65,
+          images: [
+            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
+            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
+            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
+          ],
+          amenities: [
+            'WiFi gratuit haut débit',
+            'TV écran plat 65" + système audio',
+            'Climatisation multi-zones',
+            'Jacuzzi privé',
+            'Terrasse privée 15m²',
+            'Salon de réception',
+            'Chambre avec dressing',
+            'Bar privé équipé',
+            'Machine à café premium',
+            'Salle de bain marbre avec douche pluie',
+            'Service butler 24h/24',
+            'Transfert VIP inclus',
+            'Bouquet de fleurs fraîches',
+            'Champagne et fruits de bienvenue',
+            'Accès spa privatisé',
+            'Dîner gastronomique offert'
+          ],
+          rating: 4.9,
+          reviews: 34,
+          available: true,
+          features: [
+            'Jacuzzi privatisé',
+            'Terrasse panoramique',
+            'Service butler 24h/24',
+            'Bar privé équipé',
+            'Dressing sur mesure',
+            'Transfert VIP inclus'
+          ]
         }
+      }
+
+      const roomData = mockRooms[id]
+      if (roomData) {
+        setRoom(roomData)
+        console.log('✅ Détail chambre chargé [msylla01]:', roomData.name)
       } else {
-        console.error('❌ Erreur HTTP API rooms [msylla01]:', response.status)
-        // Fallback sur données simulées
-        fetchRoomDetailFallback()
+        console.error('❌ Chambre non trouvée [msylla01]:', id)
+        router.push('/rooms')
       }
 
     } catch (error) {
-      console.error('❌ Erreur réseau API rooms [msylla01]:', error)
-      // Fallback sur données simulées
-      fetchRoomDetailFallback()
+      console.error('❌ Erreur chargement détail chambre [msylla01]:', error)
+      router.push('/rooms')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchRoomDetailFallback = () => {
-    console.log('🔄 Utilisation données fallback [msylla01]')
-    
-    // Fallback sur données simulées
-    const mockRooms = {
-      'room_1': {
-        id: 'room_1',
-        name: 'Chambre Simple Confort',
-        description: 'Une chambre élégante et fonctionnelle pour un séjour en solo. Parfaitement équipée avec un lit simple, un bureau et tout le confort moderne.',
-        type: 'SINGLE',
-        price: 120,
-        capacity: 1,
-        size: 22,
-        images: [
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
-        ],
-        amenities: [
-          'WiFi gratuit haut débit',
-          'TV écran plat 43"',
-          'Climatisation individuelle',
-          'Coffre-fort numérique',
-          'Salle de bain privée avec douche',
-          'Minibar',
-          'Bureau de travail',
-          'Téléphone direct'
-        ],
-        rating: 4.2,
-        reviewCount: 45,
-        available: true
-      },
-      'room_2': {
-        id: 'room_2',
-        name: 'Chambre Double Prestige',
-        description: 'Spacieuse chambre double avec balcon privé offrant une vue imprenable. Idéale pour les couples recherchant confort et romantisme.',
-        type: 'DOUBLE',
-        price: 180,
-        capacity: 2,
-        size: 28,
-        images: [
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
-        ],
-        amenities: [
-          'WiFi gratuit haut débit',
-          'TV écran plat 50"',
-          'Climatisation individuelle',
-          'Balcon privé avec vue',
-          'Lit king size',
-          'Minibar premium',
-          'Coffre-fort numérique',
-          'Salle de bain avec baignoire'
-        ],
-        rating: 4.5,
-        reviewCount: 128,
-        available: true
-      },
-      'room_3': {
-        id: 'room_3',
-        name: 'Suite Junior Executive',
-        description: 'Suite élégante avec salon séparé, parfaite pour les voyages d\'affaires ou les séjours prolongés.',
-        type: 'SUITE',
-        price: 350,
-        capacity: 2,
-        size: 45,
-        images: [
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
-        ],
-        amenities: [
-          'WiFi gratuit haut débit',
-          'TV écran plat 55"',
-          'Climatisation multi-zones',
-          'Salon séparé',
-          'Bureau executive',
-          'Machine à café Nespresso',
-          'Service butler disponible'
-        ],
-        rating: 4.8,
-        reviewCount: 89,
-        available: true
-      },
-      'room_4': {
-        id: 'room_4',
-        name: 'Chambre Familiale Spacieuse',
-        description: 'Chambre parfaite pour les familles avec enfants. Espace optimisé avec lits superposés et coin jeux.',
-        type: 'FAMILY',
-        price: 250,
-        capacity: 4,
-        size: 40,
-        images: [
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
-        ],
-        amenities: [
-          'WiFi gratuit haut débit',
-          'TV écran plat 50"',
-          'Lits superposés enfants',
-          'Coin jeux aménagé',
-          'Salle de bain familiale',
-          'Console de jeux'
-        ],
-        rating: 4.6,
-        reviewCount: 67,
-        available: true
-      },
-      'room_5': {
-        id: 'room_5',
-        name: 'Suite Présidentielle Deluxe',
-        description: 'Notre suite la plus luxueuse avec jacuzzi privé, terrasse et service personnalisé.',
-        type: 'DELUXE',
-        price: 450,
-        capacity: 2,
-        size: 65,
-        images: [
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
-        ],
-        amenities: [
-          'WiFi gratuit haut débit',
-          'TV écran plat 65"',
-          'Jacuzzi privé',
-          'Terrasse privée',
-          'Service butler 24h/24',
-          'Transfert VIP inclus'
-        ],
-        rating: 4.9,
-        reviewCount: 34,
-        available: true
-      }
-    }
-
-    const roomData = mockRooms[id]
-    if (roomData) {
-      setRoom(roomData)
-      console.log('✅ Détail chambre fallback chargé [msylla01]:', roomData.name)
-    } else {
-      console.error('❌ Chambre fallback non trouvée [msylla01]:', id)
-      router.push('/rooms')
     }
   }
 
@@ -273,10 +325,7 @@ export default function RoomDetail() {
         },
         body: JSON.stringify({
           roomId: room.id,
-          checkIn: bookingData.checkIn,
-          checkOut: bookingData.checkOut,
-          guests: bookingData.guests,
-          specialRequests: bookingData.specialRequests
+          ...bookingData
         })
       })
 
@@ -284,7 +333,7 @@ export default function RoomDetail() {
 
       if (data.success) {
         console.log('✅ Réservation créée [msylla01]:', data.booking.id)
-        alert(`🎉 Réservation confirmée !\n\nRéférence: ${data.booking.id}\nChambre: ${room.name}\nDu ${bookingData.checkIn} au ${bookingData.checkOut}\nTotal: ${calculateTotal()}€\n\nVous allez être redirigé vers vos réservations.`)
+        alert(`🎉 Réservation confirmée !\n\nRéférence: ${data.booking.id}\nChambre: ${room.name}\nDu ${bookingData.checkIn} au ${bookingData.checkOut}\n\nVous allez être redirigé vers vos réservations.`)
         router.push('/dashboard')
       } else {
         setBookingError(data.message || 'Erreur lors de la réservation')
@@ -346,7 +395,6 @@ export default function RoomDetail() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des détails...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 00:09:18</p>
         </div>
       </div>
     )
@@ -415,7 +463,7 @@ export default function RoomDetail() {
                 {/* Image principale */}
                 <div className="relative h-96 overflow-hidden">
                   <img
-                    src={room.images && room.images[selectedImage] ? room.images[selectedImage] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'}
+                    src={room.images[selectedImage]}
                     alt={room.name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -435,35 +483,43 @@ export default function RoomDetail() {
                       </div>
                     )}
                   </div>
+
+                  {/* Actions */}
+                  <div className="absolute top-4 right-4 flex space-x-2">
+                    <button className="bg-white bg-opacity-90 backdrop-blur-sm p-2 rounded-full hover:bg-opacity-100 transition-colors">
+                      <HeartIcon className="w-5 h-5 text-gray-600" />
+                    </button>
+                    <button className="bg-white bg-opacity-90 backdrop-blur-sm p-2 rounded-full hover:bg-opacity-100 transition-colors">
+                      <ShareIcon className="w-5 h-5 text-gray-600" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Miniatures */}
-                {room.images && room.images.length > 1 && (
-                  <div className="p-4">
-                    <div className="flex space-x-2 overflow-x-auto">
-                      {room.images.map((image, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setSelectedImage(index)}
-                          className={`flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                            selectedImage === index 
-                              ? 'border-blue-500' 
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <img
-                            src={image}
-                            alt={`${room.name} ${index + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'
-                            }}
-                          />
-                        </button>
-                      ))}
-                    </div>
+                <div className="p-4">
+                  <div className="flex space-x-2 overflow-x-auto">
+                    {room.images.map((image, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImage(index)}
+                        className={`flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                          selectedImage === index 
+                            ? 'border-blue-500' 
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <img
+                          src={image}
+                          alt={`${room.name} ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'
+                          }}
+                        />
+                      </button>
+                    ))}
                   </div>
-                )}
+                </div>
               </motion.div>
 
               {/* Détails de la chambre */}
@@ -489,7 +545,7 @@ export default function RoomDetail() {
                       </div>
                       <div className="flex items-center space-x-1">
                         <StarIcon className="w-5 h-5 text-yellow-400" />
-                        <span>{room.rating}/5 ({room.reviewCount || 0} avis)</span>
+                        <span>{room.rating}/5 ({room.reviews} avis)</span>
                       </div>
                     </div>
                   </div>
@@ -506,13 +562,28 @@ export default function RoomDetail() {
                   {room.description}
                 </p>
 
+                {/* Caractéristiques principales */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    �� Caractéristiques principales
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {room.features.map((feature, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <CheckCircleIcon className="w-5 h-5 text-green-500" />
+                        <span className="text-gray-700">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Équipements */}
                 <div className="mb-8">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     ⚡ Équipements et services
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {room.amenities && room.amenities.map((amenity, index) => (
+                    {room.amenities.map((amenity, index) => (
                       <div key={index} className="flex items-center space-x-2">
                         <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                         <span className="text-gray-700 text-sm">{amenity}</span>
@@ -545,7 +616,7 @@ export default function RoomDetail() {
                           ))}
                         </div>
                         <p className="text-gray-600 text-sm">
-                          Basé sur {room.reviewCount || 0} avis clients
+                          Basé sur {room.reviews} avis clients
                         </p>
                       </div>
                     </div>
@@ -775,7 +846,7 @@ export default function RoomDetail() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Détail chambre Hotel Luxe • API + Fallback • Développé par msylla01 • 2025-10-02 00:09:18 UTC
+              Détail chambre Hotel Luxe • Développé par msylla01 • 2025-10-02 00:02:28 UTC
             </p>
           </motion.div>
         </main>
