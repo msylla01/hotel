@@ -5,10 +5,12 @@ const { PrismaClient } = require('@prisma/client');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/rooms - Liste toutes les chambres (public)
+console.log('🏨 Routes rooms - VRAIES DONNÉES DB [msylla01] - 2025-10-02 00:52:45');
+
+// GET /api/rooms - VRAIES chambres depuis DB
 router.get('/', async (req, res) => {
   try {
-    console.log('🏨 Récupération liste chambres [msylla01] - 2025-10-02 00:09:18');
+    console.log('🏨 GET chambres DB [msylla01]');
 
     const { type, minPrice, maxPrice, capacity, available } = req.query;
     
@@ -39,23 +41,23 @@ router.get('/', async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Calculer la note moyenne pour chaque chambre
+    // Calculer rating moyen depuis vraies reviews
     const roomsWithRating = rooms.map(room => {
       const reviews = room.reviews;
       const avgRating = reviews.length > 0 
         ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
-        : 4.5; // Note par défaut
+        : 0;
       
       return {
         ...room,
-        rating: Math.round(avgRating * 10) / 10,
+        rating: avgRating > 0 ? Math.round(avgRating * 10) / 10 : null,
         reviewCount: room._count.reviews,
-        reviews: undefined, // Supprimer les reviews détaillées de la liste
+        reviews: undefined,
         _count: undefined
       };
     });
 
-    console.log(`✅ ${roomsWithRating.length} chambres récupérées [msylla01]`);
+    console.log(`✅ ${roomsWithRating.length} chambres DB récupérées [msylla01]`);
 
     res.json({
       success: true,
@@ -67,19 +69,20 @@ router.get('/', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur récupération chambres [msylla01]:', error);
+    console.error('❌ Erreur GET chambres DB [msylla01]:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des chambres',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// GET /api/rooms/:id - Détails d'une chambre (public) - CORRIGÉ
+// GET /api/rooms/:id - VRAIE chambre depuis DB
 router.get('/:id', async (req, res) => {
   try {
-    console.log('🏨 Récupération détail chambre [msylla01] - 2025-10-02 00:09:18:', req.params.id);
+    console.log('🏨 GET chambre détail DB [msylla01]:', req.params.id);
 
     const room = await prisma.room.findFirst({
       where: {
@@ -96,7 +99,6 @@ router.get('/:id', async (req, res) => {
               select: {
                 firstName: true,
                 lastName: true,
-                // Suppression du champ avatar qui n'existe pas
                 id: true,
                 createdAt: true
               }
@@ -125,24 +127,31 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    // Calculer la note moyenne
+    // Calculer rating depuis vraies reviews
     const reviews = room.reviews;
     const avgRating = reviews.length > 0 
       ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
-      : 4.5;
+      : 0;
 
-    // Vérifier la disponibilité (simulation)
-    const isAvailable = true; // À implémenter avec logique de réservation
+    // Vérifier disponibilité en vérifiant conflits
+    const now = new Date();
+    const futureBookings = await prisma.booking.count({
+      where: {
+        roomId: room.id,
+        status: { in: ['CONFIRMED', 'PENDING'] },
+        checkIn: { gte: now }
+      }
+    });
 
     const roomWithRating = {
       ...room,
-      rating: Math.round(avgRating * 10) / 10,
+      rating: avgRating > 0 ? Math.round(avgRating * 10) / 10 : null,
       reviewCount: room._count.reviews,
-      available: isAvailable,
+      available: futureBookings === 0, // Disponible si pas de réservations futures
       _count: undefined
     };
 
-    console.log('✅ Détail chambre récupéré [msylla01]:', room.name);
+    console.log('✅ Chambre DB récupérée [msylla01]:', room.name);
 
     res.json({
       success: true,
@@ -152,11 +161,11 @@ router.get('/:id', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur récupération détail chambre [msylla01]:', error);
+    console.error('❌ Erreur GET chambre détail DB [msylla01]:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération de la chambre',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur serveur',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }

@@ -6,19 +6,25 @@ const { authenticateToken, requireActiveAccount } = require('../middleware/auth'
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Schema de validation pour nouvelle réservation
+console.log('📋 Routes bookings - VRAIES DONNÉES UNIQUEMENT [msylla01] - 2025-10-02 01:07:14');
+
+// Schema de validation CORRIGÉ (échapper les apostrophes)
 const createBookingSchema = Joi.object({
   roomId: Joi.string().required(),
-  checkIn: Joi.date().min('now').required(),
-  checkOut: Joi.date().greater(Joi.ref('checkIn')).required(),
+  checkIn: Joi.date().min('now').required().messages({
+    'date.min': 'La date d\'arrivee ne peut pas etre dans le passe'
+  }),
+  checkOut: Joi.date().greater(Joi.ref('checkIn')).required().messages({
+    'date.greater': 'La date de depart doit etre apres la date d\'arrivee'
+  }),
   guests: Joi.number().integer().min(1).max(10).required(),
   specialRequests: Joi.string().max(500).optional().allow('')
 });
 
-// GET /api/bookings - Mes réservations
+// GET /api/bookings - VRAIES réservations depuis DB
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    console.log('📋 Récupération réservations [msylla01] - 2025-10-02 00:27:12:', req.user.id);
+    console.log('📋 GET réservations DB [msylla01]:', req.user.id);
 
     const { status, limit = 20, page = 1 } = req.query;
     
@@ -64,6 +70,7 @@ router.get('/', authenticateToken, async (req, res) => {
       prisma.booking.count({ where: whereClause })
     ]);
 
+    // Enrichir avec calculs
     const enrichedBookings = bookings.map(booking => {
       const checkInDate = new Date(booking.checkIn);
       const checkOutDate = new Date(booking.checkOut);
@@ -86,11 +93,11 @@ router.get('/', authenticateToken, async (req, res) => {
         paymentStatus,
         roomImage: booking.room.images && booking.room.images.length > 0 
           ? booking.room.images[0] 
-          : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
+          : null
       };
     });
 
-    console.log(`✅ ${enrichedBookings.length} réservations trouvées [msylla01]`);
+    console.log(`✅ ${enrichedBookings.length} réservations DB récupérées [msylla01]`);
 
     res.json({
       success: true,
@@ -106,20 +113,20 @@ router.get('/', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur récupération réservations [msylla01]:', error);
+    console.error('❌ Erreur GET bookings DB [msylla01]:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des réservations',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur serveur',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// GET /api/bookings/stats - Statistiques utilisateur
+// GET /api/bookings/stats - VRAIES stats depuis DB
 router.get('/stats', authenticateToken, async (req, res) => {
   try {
-    console.log('📊 Récupération stats [msylla01]:', req.user.id);
+    console.log('📊 GET stats DB [msylla01]:', req.user.id);
 
     const [totalBookings, totalSpent, upcomingBookings, completedBookings] = await Promise.all([
       prisma.booking.count({
@@ -159,10 +166,10 @@ router.get('/stats', authenticateToken, async (req, res) => {
       completedStays: completedBookings,
       loyaltyPoints: Math.floor((totalSpent._sum.totalAmount || 0) / 10),
       memberSince: user.createdAt,
-      favoriteRooms: 2
+      favoriteRooms: 0
     };
 
-    console.log('✅ Stats calculées [msylla01]:', stats);
+    console.log('✅ Stats DB calculées [msylla01]:', stats);
 
     res.json({
       success: true,
@@ -172,26 +179,27 @@ router.get('/stats', authenticateToken, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur stats [msylla01]:', error);
+    console.error('❌ Erreur GET stats DB [msylla01]:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des statistiques',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// POST /api/bookings - Créer une nouvelle réservation - CORRIGÉ
+// POST /api/bookings - CRÉATION RÉELLE en DB uniquement
 router.post('/', authenticateToken, requireActiveAccount, async (req, res) => {
   try {
-    console.log('📝 CRÉATION RÉSERVATION [msylla01] - 2025-10-02 00:27:12');
-    console.log('User ID:', req.user.id);
+    console.log('📝 CRÉATION réservation DB UNIQUEMENT [msylla01] - 2025-10-02 01:07:14');
+    console.log('User:', req.user.id, req.user.email);
     console.log('Body:', req.body);
 
-    // Validation des données
+    // Validation Joi CORRIGÉE
     const { error } = createBookingSchema.validate(req.body);
     if (error) {
-      console.log('❌ Erreur validation [msylla01]:', error.details[0].message);
+      console.log('❌ Erreur validation Joi [msylla01]:', error.details[0].message);
       return res.status(400).json({
         success: false,
         message: error.details[0].message,
@@ -202,37 +210,18 @@ router.post('/', authenticateToken, requireActiveAccount, async (req, res) => {
 
     const { roomId, checkIn, checkOut, guests, specialRequests } = req.body;
 
-    // Chambres simulées pour fallback
-    const mockRooms = {
-      'room_1': { id: 'room_1', name: 'Chambre Simple Confort', price: 120, capacity: 1, isActive: true },
-      'room_2': { id: 'room_2', name: 'Chambre Double Prestige', price: 180, capacity: 2, isActive: true },
-      'room_3': { id: 'room_3', name: 'Suite Junior Executive', price: 350, capacity: 2, isActive: true },
-      'room_4': { id: 'room_4', name: 'Chambre Familiale Spacieuse', price: 250, capacity: 4, isActive: true },
-      'room_5': { id: 'room_5', name: 'Suite Présidentielle Deluxe', price: 450, capacity: 2, isActive: true }
-    };
+    // Vérifier que la chambre existe EN BASE
+    const room = await prisma.room.findUnique({
+      where: { id: roomId }
+    });
 
-    let room = null;
-    
-    try {
-      // Essayer de récupérer depuis la DB
-      room = await prisma.room.findUnique({
-        where: { id: roomId }
-      });
-    } catch (dbError) {
-      console.log('⚠️ DB non disponible, utilisation fallback [msylla01]');
-    }
-
-    // Fallback sur données simulées si DB pas dispo
     if (!room) {
-      room = mockRooms[roomId];
-      if (!room) {
-        return res.status(404).json({
-          success: false,
-          message: 'Chambre non trouvée',
-          field: 'roomId',
-          timestamp: new Date().toISOString()
-        });
-      }
+      return res.status(404).json({
+        success: false,
+        message: 'Chambre non trouvée en base de données',
+        field: 'roomId',
+        timestamp: new Date().toISOString()
+      });
     }
 
     if (!room.isActive) {
@@ -252,84 +241,96 @@ router.post('/', authenticateToken, requireActiveAccount, async (req, res) => {
       });
     }
 
+    // Validation manuelle des dates avec marge timezone
     const checkInDate = new Date(checkIn);
     const checkOutDate = new Date(checkOut);
     const now = new Date();
+    
+    // Marge de 2 heures pour éviter problèmes timezone
+    const nowWithMargin = new Date(now.getTime() - (2 * 60 * 60 * 1000));
 
-    if (checkInDate < now) {
+    console.log('📅 Validation dates [msylla01]:', {
+      checkIn: checkIn,
+      checkInDate: checkInDate.toISOString(),
+      checkOut: checkOut,
+      checkOutDate: checkOutDate.toISOString(),
+      now: now.toISOString(),
+      nowWithMargin: nowWithMargin.toISOString()
+    });
+
+    // Validation avec marge généreuse
+    if (checkInDate < nowWithMargin) {
+      console.log('❌ Date arrivée trop ancienne [msylla01]');
       return res.status(400).json({
         success: false,
         message: 'La date d\'arrivée ne peut pas être dans le passé',
         field: 'checkIn',
+        debug: {
+          checkIn: checkInDate.toISOString(),
+          minimumRequired: nowWithMargin.toISOString(),
+          serverTime: now.toISOString()
+        },
         timestamp: new Date().toISOString()
       });
     }
 
     if (checkOutDate <= checkInDate) {
+      console.log('❌ Date départ incorrecte [msylla01]');
       return res.status(400).json({
         success: false,
         message: 'La date de départ doit être après la date d\'arrivée',
         field: 'checkOut',
+        debug: {
+          checkIn: checkInDate.toISOString(),
+          checkOut: checkOutDate.toISOString()
+        },
         timestamp: new Date().toISOString()
       });
     }
 
-    // Calculer le montant total
+    // Vérifier conflits de réservation EN BASE
+    const conflictingBookings = await prisma.booking.findMany({
+      where: {
+        roomId,
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        OR: [
+          {
+            checkIn: { lte: checkInDate },
+            checkOut: { gt: checkInDate }
+          },
+          {
+            checkIn: { lt: checkOutDate },
+            checkOut: { gte: checkOutDate }
+          },
+          {
+            checkIn: { gte: checkInDate },
+            checkOut: { lte: checkOutDate }
+          }
+        ]
+      }
+    });
+
+    if (conflictingBookings.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cette chambre n\'est pas disponible pour ces dates',
+        conflictingDates: conflictingBookings.map(b => ({
+          checkIn: b.checkIn,
+          checkOut: b.checkOut
+        })),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Calculer montant
     const nights = Math.ceil((checkOutDate - checkInDate) / (1000 * 60 * 60 * 24));
     const totalAmount = nights * room.price;
 
-    console.log('💰 Calcul réservation [msylla01]:', {
-      nights,
-      pricePerNight: room.price,
-      totalAmount
-    });
+    console.log('💰 Calcul [msylla01]:', { nights, price: room.price, total: totalAmount });
 
-    let booking = null;
-
-    try {
-      // Essayer de créer en DB
-      booking = await prisma.booking.create({
-        data: {
-          userId: req.user.id,
-          roomId,
-          checkIn: checkInDate,
-          checkOut: checkOutDate,
-          guests,
-          totalAmount,
-          status: 'PENDING',
-          specialRequests: specialRequests || null
-        },
-        include: {
-          room: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              price: true,
-              images: true
-            }
-          },
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true
-            }
-          }
-        }
-      });
-
-      console.log('✅ Réservation créée en DB [msylla01]:', booking.id);
-
-    } catch (dbError) {
-      console.log('⚠️ Erreur DB, création simulée [msylla01]:', dbError.message);
-      
-      // Fallback : créer une réservation simulée
-      const bookingId = 'BOOK_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      
-      booking = {
-        id: bookingId,
+    // CRÉER EN BASE
+    const booking = await prisma.booking.create({
+      data: {
         userId: req.user.id,
         roomId,
         checkIn: checkInDate,
@@ -337,29 +338,35 @@ router.post('/', authenticateToken, requireActiveAccount, async (req, res) => {
         guests,
         totalAmount,
         status: 'PENDING',
-        specialRequests: specialRequests || null,
-        createdAt: new Date(),
+        specialRequests: specialRequests || null
+      },
+      include: {
         room: {
-          id: roomId,
-          name: room.name,
-          type: room.type || 'DOUBLE',
-          price: room.price,
-          images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800']
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            price: true,
+            images: true,
+            description: true
+          }
         },
         user: {
-          id: req.user.id,
-          firstName: req.user.firstName,
-          lastName: req.user.lastName,
-          email: req.user.email
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true
+          }
         }
-      };
+      }
+    });
 
-      console.log('✅ Réservation simulée créée [msylla01]:', bookingId);
-    }
+    console.log('✅ RÉSERVATION CRÉÉE EN BASE [msylla01]:', booking.id);
 
-    const response = {
+    res.status(201).json({
       success: true,
-      message: 'Réservation créée avec succès',
+      message: 'Réservation créée avec succès en base de données',
       booking: {
         ...booking,
         nights,
@@ -368,26 +375,19 @@ router.post('/', authenticateToken, requireActiveAccount, async (req, res) => {
       },
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
-    };
-
-    console.log('✅ RÉSERVATION RÉUSSIE [msylla01]:', response.booking.id, totalAmount + '€');
-
-    res.status(201).json(response);
+    });
 
   } catch (error) {
-    console.error('❌ ERREUR CRÉATION RÉSERVATION [msylla01]:', error);
+    console.error('❌ ERREUR création réservation DB [msylla01]:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la création de la réservation',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur serveur',
-      timestamp: new Date().toISOString(),
-      debug: {
-        userActive: req.user?.isActive,
-        userId: req.user?.id,
-        body: req.body
-      }
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
+
+console.log('✅ Routes bookings chargées [msylla01] - 2025-10-02 01:07:14');
 
 module.exports = router;

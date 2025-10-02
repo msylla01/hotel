@@ -70,9 +70,8 @@ export default function Dashboard() {
         return
       }
 
-      console.log('📊 Récupération données dashboard RÉELLES [msylla01] - 2025-10-01 18:58:35')
+      console.log('📊 Récupération données dashboard DB RÉELLES [msylla01] - 2025-10-02 00:52:45')
 
-      // Récupérer les vraies réservations
       const [bookingsResponse, statsResponse] = await Promise.all([
         fetch('http://localhost:5000/api/bookings', {
           headers: {
@@ -90,39 +89,32 @@ export default function Dashboard() {
         const bookingsData = await bookingsResponse.json()
         if (bookingsData.success) {
           setBookings(bookingsData.bookings)
-          console.log(`✅ ${bookingsData.bookings.length} réservations RÉELLES récupérées [msylla01]`)
+          console.log(`✅ ${bookingsData.bookings.length} réservations DB récupérées [msylla01]`)
+        } else {
+          throw new Error(bookingsData.message)
         }
       } else {
-        console.error('❌ Erreur récupération réservations:', bookingsResponse.status)
-        setBookings([]) // Fallback sur tableau vide
+        throw new Error(`Erreur bookings: ${bookingsResponse.status}`)
       }
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json()
         if (statsData.success) {
           setStats(statsData.stats)
-          console.log('✅ Stats RÉELLES récupérées [msylla01]:', statsData.stats)
+          console.log('✅ Stats DB récupérées [msylla01]:', statsData.stats)
+        } else {
+          throw new Error(statsData.message)
         }
       } else {
-        console.error('❌ Erreur récupération stats:', statsResponse.status)
-        // Fallback stats
-        setStats({
-          totalBookings: 0,
-          totalSpent: 0,
-          upcomingStays: 0,
-          completedStays: 0,
-          loyaltyPoints: 0,
-          favoriteRooms: 0
-        })
+        throw new Error(`Erreur stats: ${statsResponse.status}`)
       }
 
-      // Notifications simulées basées sur le statut du compte
       const mockNotifications = user?.isActive ? [
         {
           id: 1,
           type: 'booking',
-          title: 'Réservations mises à jour',
-          message: 'Vos réservations ont été synchronisées avec succès',
+          title: 'Données synchronisées',
+          message: 'Toutes vos données proviennent de la base PostgreSQL',
           date: new Date().toISOString(),
           read: false,
           icon: CheckCircleIcon,
@@ -133,7 +125,7 @@ export default function Dashboard() {
           id: 1,
           type: 'account',
           title: 'Compte désactivé',
-          message: 'Votre compte est temporairement désactivé. Réactivez-le pour accéder à toutes les fonctionnalités.',
+          message: 'Réactivez votre compte pour effectuer des réservations',
           date: new Date().toISOString(),
           read: false,
           icon: ExclamationTriangleIcon,
@@ -142,32 +134,10 @@ export default function Dashboard() {
       ]
 
       setNotifications(mockNotifications)
-
-      // Chambres favorites simulées
-      const mockFavorites = [
-        {
-          id: 'room_1',
-          name: 'Suite Présidentielle Deluxe',
-          type: 'DELUXE',
-          price: 450,
-          image: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400',
-          rating: 4.9
-        },
-        {
-          id: 'room_2',
-          name: 'Chambre Double Prestige',
-          type: 'DOUBLE',
-          price: 180,
-          image: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=400',
-          rating: 4.8
-        }
-      ]
-
-      setFavoriteRooms(mockFavorites)
+      setFavoriteRooms([])
 
     } catch (error) {
-      console.error('❌ Erreur chargement dashboard RÉEL [msylla01]:', error)
-      // Fallback sur données vides
+      console.error('❌ Erreur chargement dashboard DB [msylla01]:', error)
       setBookings([])
       setStats({
         totalBookings: 0,

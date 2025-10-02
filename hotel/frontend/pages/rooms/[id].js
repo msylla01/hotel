@@ -59,7 +59,7 @@ export default function RoomDetail() {
     try {
       setLoading(true)
       
-      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-02 00:09:18:', id)
+      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-02 01:09:24:', id)
       
       const response = await fetch(`http://localhost:5000/api/rooms/${id}`)
       
@@ -70,18 +70,15 @@ export default function RoomDetail() {
           console.log('✅ Détail chambre API récupéré [msylla01]:', data.room.name)
         } else {
           console.error('❌ Erreur API rooms [msylla01]:', data.message)
-          // Fallback sur données simulées
           fetchRoomDetailFallback()
         }
       } else {
         console.error('❌ Erreur HTTP API rooms [msylla01]:', response.status)
-        // Fallback sur données simulées
         fetchRoomDetailFallback()
       }
 
     } catch (error) {
       console.error('❌ Erreur réseau API rooms [msylla01]:', error)
-      // Fallback sur données simulées
       fetchRoomDetailFallback()
     } finally {
       setLoading(false)
@@ -91,7 +88,6 @@ export default function RoomDetail() {
   const fetchRoomDetailFallback = () => {
     console.log('🔄 Utilisation données fallback [msylla01]')
     
-    // Fallback sur données simulées
     const mockRooms = {
       'room_1': {
         id: 'room_1',
@@ -103,8 +99,7 @@ export default function RoomDetail() {
         size: 22,
         images: [
           'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
+          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
         ],
         amenities: [
           'WiFi gratuit haut débit',
@@ -130,8 +125,7 @@ export default function RoomDetail() {
         size: 28,
         images: [
           'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800',
-          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
+          'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800'
         ],
         amenities: [
           'WiFi gratuit haut débit',
@@ -157,8 +151,7 @@ export default function RoomDetail() {
         size: 45,
         images: [
           'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800',
-          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800',
-          'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800'
+          'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
         ],
         amenities: [
           'WiFi gratuit haut débit',
@@ -235,7 +228,8 @@ export default function RoomDetail() {
 
   const handleBooking = async () => {
     if (!user.isActive) {
-      alert('Veuillez réactiver votre compte pour effectuer une réservation')
+      alert('⚠️ Veuillez réactiver votre compte pour effectuer une réservation')
+      router.push('/auth/reactivate')
       return
     }
 
@@ -258,10 +252,20 @@ export default function RoomDetail() {
       setBookingLoading(true)
       setBookingError('')
 
-      console.log('🎯 Tentative réservation [msylla01]:', {
+      // Préparer les dates au bon format ISO
+      const checkInDate = new Date(bookingData.checkIn + 'T14:00:00.000Z')
+      const checkOutDate = new Date(bookingData.checkOut + 'T11:00:00.000Z')
+
+      const requestData = {
         roomId: room.id,
-        ...bookingData
-      })
+        checkIn: checkInDate.toISOString(),
+        checkOut: checkOutDate.toISOString(),
+        guests: parseInt(bookingData.guests),
+        specialRequests: bookingData.specialRequests || ''
+      }
+
+      console.log('🎯 TENTATIVE RÉSERVATION [msylla01] - 2025-10-02 01:09:24')
+      console.log('📋 Données envoyées:', requestData)
 
       const token = localStorage.getItem('hotel_token')
       
@@ -271,28 +275,35 @@ export default function RoomDetail() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          roomId: room.id,
-          checkIn: bookingData.checkIn,
-          checkOut: bookingData.checkOut,
-          guests: bookingData.guests,
-          specialRequests: bookingData.specialRequests
-        })
+        body: JSON.stringify(requestData)
       })
 
       const data = await response.json()
 
       if (data.success) {
-        console.log('✅ Réservation créée [msylla01]:', data.booking.id)
-        alert(`🎉 Réservation confirmée !\n\nRéférence: ${data.booking.id}\nChambre: ${room.name}\nDu ${bookingData.checkIn} au ${bookingData.checkOut}\nTotal: ${calculateTotal()}€\n\nVous allez être redirigé vers vos réservations.`)
+        console.log('✅ RÉSERVATION RÉUSSIE [msylla01]:', data.booking.id)
+        
+        const nights = getNights()
+        const total = calculateTotal()
+        
+        alert(`🎉 RÉSERVATION CONFIRMÉE !\n\n` +
+              `📋 Référence: ${data.booking.id}\n` +
+              `🏨 Chambre: ${room.name}\n` +
+              `📅 Du ${bookingData.checkIn} au ${bookingData.checkOut}\n` +
+              `🌙 ${nights} nuit(s)\n` +
+              `👥 ${bookingData.guests} personne(s)\n` +
+              `💰 Total: ${total}€\n\n` +
+              `✅ Redirection vers vos réservations...`)
+        
         router.push('/dashboard')
       } else {
+        console.error('❌ ERREUR RÉSERVATION [msylla01]:', data.message)
         setBookingError(data.message || 'Erreur lors de la réservation')
       }
 
     } catch (error) {
-      console.error('❌ Erreur réservation [msylla01]:', error)
-      setBookingError('Erreur de connexion. Veuillez réessayer.')
+      console.error('❌ ERREUR RÉSEAU RÉSERVATION [msylla01]:', error)
+      setBookingError('Erreur de connexion au serveur')
     } finally {
       setBookingLoading(false)
     }
@@ -346,7 +357,7 @@ export default function RoomDetail() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des détails...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 00:09:18</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 01:09:24</p>
         </div>
       </div>
     )
@@ -589,28 +600,34 @@ export default function RoomDetail() {
                 )}
 
                 <div className="space-y-4">
-                  {/* Dates */}
+                  {/* Dates avec validation améliorée */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Arrivée
+                        Arrivée (à partir de 14h)
                       </label>
                       <input
                         type="date"
                         value={bookingData.checkIn}
-                        onChange={(e) => setBookingData({...bookingData, checkIn: e.target.value})}
+                        onChange={(e) => {
+                          setBookingData({...bookingData, checkIn: e.target.value})
+                          if (bookingError) setBookingError('')
+                        }}
                         min={new Date().toISOString().split('T')[0]}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Départ
+                        Départ (avant 11h)
                       </label>
                       <input
                         type="date"
                         value={bookingData.checkOut}
-                        onChange={(e) => setBookingData({...bookingData, checkOut: e.target.value})}
+                        onChange={(e) => {
+                          setBookingData({...bookingData, checkOut: e.target.value})
+                          if (bookingError) setBookingError('')
+                        }}
                         min={bookingData.checkIn || new Date().toISOString().split('T')[0]}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
@@ -677,6 +694,9 @@ export default function RoomDetail() {
                       <h4 className="font-semibold text-blue-900 mb-2">
                         💰 Récapitulatif
                       </h4>
+                      <div className="text-xs text-blue-700 mb-2">
+                        📍 Arrivée: à partir de 14h • Départ: avant 11h
+                      </div>
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span className="text-blue-700">Durée:</span>
@@ -775,7 +795,7 @@ export default function RoomDetail() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Détail chambre Hotel Luxe • API + Fallback • Développé par msylla01 • 2025-10-02 00:09:18 UTC
+              Détail chambre Hotel Luxe • JSX corrigé • msylla01 • 2025-10-02 01:09:24 UTC
             </p>
           </motion.div>
         </main>

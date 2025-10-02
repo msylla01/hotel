@@ -16,7 +16,8 @@ import {
   TvIcon,
   CarIcon,
   UserCircleIcon,
-  HeartIcon
+  HeartIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import { StarIcon, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid'
 
@@ -25,6 +26,7 @@ export default function Rooms() {
   const [user, setUser] = useState(null)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [favoriteRooms, setFavoriteRooms] = useState([])
   const [filters, setFilters] = useState({
     type: '',
@@ -46,14 +48,44 @@ export default function Rooms() {
 
     const user = JSON.parse(userData)
     setUser(user)
-    console.log('👤 Utilisateur connecté [msylla01] - 2025-10-02 00:31:15:', user.firstName, user.lastName, 'Active:', user.isActive)
+    console.log('👤 Utilisateur connecté [msylla01] - 2025-10-02 00:52:45:', user.firstName, user.lastName)
     
-    fetchRooms()
+    fetchRoomsFromAPI()
     loadFavorites()
   }, [router])
 
+  const fetchRoomsFromAPI = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      console.log('🏨 Récupération chambres API [msylla01] - 2025-10-02 00:52:45')
+      
+      const response = await fetch('http://localhost:5000/api/rooms')
+      
+      if (!response.ok) {
+        throw new Error(`Erreur HTTP: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.message || 'Erreur API')
+      }
+
+      setRooms(data.rooms)
+      console.log(`✅ ${data.rooms.length} chambres API récupérées [msylla01]`)
+
+    } catch (error) {
+      console.error('❌ Erreur récupération chambres API [msylla01]:', error)
+      setError(`Impossible de charger les chambres: ${error.message}`)
+      setRooms([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const loadFavorites = () => {
-    // Charger les favoris depuis localStorage pour persistance
     const savedFavorites = localStorage.getItem('hotel_favorites')
     if (savedFavorites) {
       try {
@@ -62,182 +94,15 @@ export default function Rooms() {
         console.log('❤️ Favoris chargés [msylla01]:', favorites)
       } catch (error) {
         console.error('❌ Erreur chargement favoris [msylla01]:', error)
-        setFavoriteRooms(['room_2', 'room_5']) // Favoris par défaut
+        setFavoriteRooms([])
       }
     } else {
-      setFavoriteRooms(['room_2', 'room_5']) // Favoris par défaut
+      setFavoriteRooms([])
     }
   }
 
   const saveFavorites = (favorites) => {
     localStorage.setItem('hotel_favorites', JSON.stringify(favorites))
-  }
-
-  const fetchRooms = async () => {
-    try {
-      setLoading(true)
-      
-      console.log('�� Récupération chambres [msylla01] - 2025-10-02 00:31:15')
-      
-      // Données complètes avec images pour toutes les chambres
-      const mockRooms = [
-        {
-          id: 'room_1',
-          name: 'Chambre Simple Confort',
-          description: 'Une chambre élégante et fonctionnelle pour un séjour en solo. Parfaitement équipée avec un lit simple, un bureau et tout le confort moderne.',
-          type: 'SINGLE',
-          price: 120,
-          capacity: 1,
-          size: 22,
-          images: [
-            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&auto=format&fit=crop'
-          ],
-          amenities: [
-            'WiFi gratuit haut débit',
-            'TV écran plat 43"',
-            'Climatisation individuelle',
-            'Coffre-fort numérique',
-            'Salle de bain privée avec douche',
-            'Minibar',
-            'Bureau de travail',
-            'Téléphone direct'
-          ],
-          rating: 4.2,
-          reviews: 45,
-          available: true
-        },
-        {
-          id: 'room_2',
-          name: 'Chambre Double Prestige',
-          description: 'Spacieuse chambre double avec balcon privé offrant une vue imprenable. Idéale pour les couples recherchant confort et romantisme.',
-          type: 'DOUBLE',
-          price: 180,
-          capacity: 2,
-          size: 28,
-          images: [
-            'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop'
-          ],
-          amenities: [
-            'WiFi gratuit haut débit',
-            'TV écran plat 50"',
-            'Climatisation individuelle',
-            'Balcon privé avec vue',
-            'Lit king size',
-            'Minibar premium',
-            'Coffre-fort numérique',
-            'Salle de bain avec baignoire',
-            'Peignoirs et chaussons',
-            'Service en chambre 24h/24'
-          ],
-          rating: 4.5,
-          reviews: 128,
-          available: true
-        },
-        {
-          id: 'room_3',
-          name: 'Suite Junior Executive',
-          description: 'Suite élégante avec salon séparé, parfaite pour les voyages d\'affaires ou les séjours prolongés. Décoration raffinée et équipements haut de gamme.',
-          type: 'SUITE',
-          price: 350,
-          capacity: 2,
-          size: 45,
-          images: [
-            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop'
-          ],
-          amenities: [
-            'WiFi gratuit haut débit',
-            'TV écran plat 55" + TV salon',
-            'Climatisation multi-zones',
-            'Salon séparé avec canapé',
-            'Bureau executive',
-            'Minibar premium',
-            'Machine à café Nespresso',
-            'Salle de bain avec douche italienne',
-            'Peignoirs et chaussons premium',
-            'Service butler disponible',
-            'Vue panoramique',
-            'Bouteille de champagne offerte'
-          ],
-          rating: 4.8,
-          reviews: 89,
-          available: true
-        },
-        {
-          id: 'room_4',
-          name: 'Chambre Familiale Spacieuse',
-          description: 'Chambre parfaite pour les familles avec enfants. Espace optimisé avec lits superposés et coin jeux pour le bonheur des petits et grands.',
-          type: 'FAMILY',
-          price: 250,
-          capacity: 4,
-          size: 40,
-          images: [
-            'https://images.unsplash.com/photo-1540518614846-7eded47d24e5?w=800&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&auto=format&fit=crop'
-          ],
-          amenities: [
-            'WiFi gratuit haut débit',
-            'TV écran plat 50"',
-            'Climatisation individuelle',
-            'Lit double parents',
-            'Lits superposés enfants',
-            'Coin jeux aménagé',
-            'Minibar adapté famille',
-            'Coffre-fort numérique',
-            'Salle de bain familiale',
-            'Kit de bienvenue enfants',
-            'Console de jeux',
-            'Balcon sécurisé'
-          ],
-          rating: 4.6,
-          reviews: 67,
-          available: true
-        },
-        {
-          id: 'room_5',
-          name: 'Suite Présidentielle Deluxe',
-          description: 'Notre suite la plus luxueuse avec jacuzzi privé, terrasse et service personnalisé. Une expérience inoubliable pour les occasions spéciales.',
-          type: 'DELUXE',
-          price: 450,
-          capacity: 2,
-          size: 65,
-          images: [
-            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=800&auto=format&fit=crop'
-          ],
-          amenities: [
-            'WiFi gratuit haut débit',
-            'TV écran plat 65" + système audio',
-            'Climatisation multi-zones',
-            'Jacuzzi privé',
-            'Terrasse privée 15m²',
-            'Salon de réception',
-            'Chambre avec dressing',
-            'Bar privé équipé',
-            'Machine à café premium',
-            'Salle de bain marbre avec douche pluie',
-            'Service butler 24h/24',
-            'Transfert VIP inclus',
-            'Bouquet de fleurs fraîches',
-            'Champagne et fruits de bienvenue'
-          ],
-          rating: 4.9,
-          reviews: 34,
-          available: true
-        }
-      ]
-
-      setRooms(mockRooms)
-      console.log(`✅ ${mockRooms.length} chambres chargées avec images [msylla01]`)
-
-    } catch (error) {
-      console.error('❌ Erreur chargement chambres [msylla01]:', error)
-      setRooms([])
-    } finally {
-      setLoading(false)
-    }
   }
 
   const toggleFavorite = async (roomId) => {
@@ -249,53 +114,23 @@ export default function Rooms() {
         return
       }
 
-      console.log('❤️ Toggle favori [msylla01] - 2025-10-02 00:31:15:', roomId)
+      console.log('❤️ Toggle favori [msylla01]:', roomId)
 
       const isFavorite = favoriteRooms.includes(roomId)
       
       if (isFavorite) {
-        // Retirer des favoris
         const newFavorites = favoriteRooms.filter(id => id !== roomId)
         setFavoriteRooms(newFavorites)
         saveFavorites(newFavorites)
         
-        // Appeler l'API (optionnel)
-        try {
-          await fetch(`http://localhost:5000/api/favorites/${roomId}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          })
-        } catch (apiError) {
-          console.log('⚠️ API favoris non disponible [msylla01]')
-        }
-        
-        // Feedback utilisateur
         const room = rooms.find(r => r.id === roomId)
         alert(`💔 "${room?.name}" retiré des favoris`)
         
       } else {
-        // Ajouter aux favoris
         const newFavorites = [...favoriteRooms, roomId]
         setFavoriteRooms(newFavorites)
         saveFavorites(newFavorites)
         
-        // Appeler l'API (optionnel)
-        try {
-          await fetch('http://localhost:5000/api/favorites', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ roomId })
-          })
-        } catch (apiError) {
-          console.log('⚠️ API favoris non disponible [msylla01]')
-        }
-        
-        // Feedback utilisateur
         const room = rooms.find(r => r.id === roomId)
         alert(`❤️ "${room?.name}" ajouté aux favoris`)
       }
@@ -342,8 +177,34 @@ export default function Rooms() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des chambres...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 00:31:15</p>
+          <p className="text-gray-600">Chargement des chambres depuis la base de données...</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 00:52:45</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Erreur de chargement</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchRoomsFromAPI}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Réessayer
+          </button>
+          <div className="mt-4">
+            <Link
+              href="/dashboard"
+              className="text-blue-600 hover:text-blue-700 text-sm"
+            >
+              ← Retour au dashboard
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -357,7 +218,7 @@ export default function Rooms() {
     <>
       <Head>
         <title>Nos Chambres - Hotel Luxe</title>
-        <meta name="description" content="Découvrez nos chambres d'exception avec tout le confort moderne" />
+        <meta name="description" content="Découvrez nos chambres d'exception avec données réelles" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -378,9 +239,11 @@ export default function Rooms() {
                   <span className="text-white font-bold text-sm">H</span>
                 </div>
                 <span className="font-semibold text-gray-900">Hotel Luxe</span>
+                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                  DB RÉELLE
+                </span>
               </div>
 
-              {/* Statut utilisateur VISIBLE */}
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
@@ -441,17 +304,17 @@ export default function Rooms() {
             className="text-center mb-12"
           >
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              🏨 Nos Chambres d'Exception
+              🏨 Nos Chambres - Données Réelles
             </h1>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Découvrez nos chambres soigneusement conçues pour votre confort et votre bien-être. 
-              Chaque espace offre une expérience unique avec des équipements haut de gamme.
+              Toutes les chambres proviennent directement de notre base de données PostgreSQL. 
+              Aucune donnée simulée.
             </p>
             {user && (
               <p className="text-sm text-gray-500 mt-2">
-                Connecté en tant que <strong>{user.firstName} {user.lastName}</strong>
-                {user.isActive ? ' • Prêt à réserver' : ' • Réactivation requise pour réserver'}
+                Connecté : <strong>{user.firstName} {user.lastName}</strong>
                 • <span className="text-red-600">❤️ {favoriteRooms.length} favoris</span>
+                • <span className="text-green-600">🗄️ Données DB en temps réel</span>
               </p>
             )}
           </motion.div>
@@ -466,6 +329,9 @@ export default function Rooms() {
             <div className="flex items-center space-x-4 mb-4">
               <FunnelIcon className="w-5 h-5 text-gray-600" />
               <h2 className="text-lg font-semibold text-gray-900">Filtrer les chambres</h2>
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                {rooms.length} chambres en base
+              </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -530,7 +396,7 @@ export default function Rooms() {
             {/* Résumé des filtres */}
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-gray-600">
-                {filteredRooms.length} chambre(s) trouvée(s) sur {rooms.length}
+                {filteredRooms.length} chambre(s) affichée(s) sur {rooms.length} en base
                 {favoriteRooms.length > 0 && (
                   <span className="ml-2 text-red-600">• ❤️ {favoriteRooms.length} favoris</span>
                 )}
@@ -544,165 +410,196 @@ export default function Rooms() {
             </div>
           </motion.div>
 
-          {/* Grille des chambres */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredRooms.map((room, index) => (
-              <motion.div
-                key={room.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 + index * 0.1 }}
-                className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-all ${
-                  favoriteRooms.includes(room.id) ? 'ring-2 ring-red-200' : ''
-                }`}
-              >
-                {/* Image avec gestion d'erreur */}
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={room.images && room.images[0] ? room.images[0] : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop'}
-                    alt={room.name}
-                    className="w-full h-full object-cover transition-transform hover:scale-105"
-                    onError={(e) => {
-                      console.log('❌ Erreur chargement image [msylla01]:', e.target.src)
-                      e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&auto=format&fit=crop'
-                    }}
-                    onLoad={() => {
-                      console.log('✅ Image chargée [msylla01]:', room.name)
-                    }}
-                  />
-                  <div className="absolute top-4 left-4">
-                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getTypeColor(room.type)}`}>
-                      {getTypeLabel(room.type)}
-                    </span>
-                  </div>
-                  <div className="absolute top-4 right-4 flex space-x-2">
-                    <div className="bg-white bg-opacity-90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center space-x-1">
-                      <StarIcon className="w-4 h-4 text-yellow-400" />
-                      <span className="text-sm font-medium">{room.rating}</span>
-                    </div>
-                    {favoriteRooms.includes(room.id) && (
-                      <div className="bg-red-500 rounded-full p-1">
-                        <HeartIconSolid className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Contenu */}
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        {room.name}
-                        {favoriteRooms.includes(room.id) && (
-                          <HeartIconSolid className="w-4 h-4 text-red-500 inline ml-2" />
-                        )}
-                      </h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <div className="flex items-center space-x-1">
-                          <UsersIcon className="w-4 h-4" />
-                          <span>{room.capacity} pers.</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <HomeIcon className="w-4 h-4" />
-                          <span>{room.size}m²</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {room.price}€
-                      </div>
-                      <div className="text-sm text-gray-500">par nuit</div>
-                    </div>
-                  </div>
-
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                    {room.description}
-                  </p>
-
-                  {/* Équipements principaux */}
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {room.amenities.slice(0, 3).map((amenity, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
-                      >
-                        {amenity.includes('WiFi') && <WifiIcon className="w-3 h-3 mr-1" />}
-                        {amenity.includes('TV') && <TvIcon className="w-3 h-3 mr-1" />}
-                        {amenity.slice(0, 20)}...
-                      </span>
-                    ))}
-                    {room.amenities.length > 3 && (
-                      <span className="text-xs text-blue-600">
-                        +{room.amenities.length - 3} autres
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Reviews */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-1">
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <StarIcon
-                            key={i}
-                            className={`w-4 h-4 ${
-                              i < Math.floor(room.rating) 
-                                ? 'text-yellow-400' 
-                                : 'text-gray-300'
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm text-gray-600">
-                        ({room.reviews} avis)
-                      </span>
-                    </div>
-                    {room.available && (
-                      <div className="flex items-center space-x-1 text-green-600">
-                        <CheckCircleIcon className="w-4 h-4" />
-                        <span className="text-xs font-medium">Disponible</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="space-y-2">
-                    <Link
-                      href={`/rooms/${room.id}`}
-                      className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center block"
-                    >
-                      {user.isActive ? 'Voir les détails & Réserver' : 'Voir les détails'}
-                    </Link>
-                    <button
-                      onClick={() => toggleFavorite(room.id)}
-                      className={`w-full border py-2 rounded-lg transition-colors text-sm font-medium ${
-                        favoriteRooms.includes(room.id) 
-                          ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100' 
-                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {favoriteRooms.includes(room.id) ? (
-                        <>
-                          <HeartIconSolid className="w-4 h-4 inline mr-1" />
-                          Retirer des favoris
-                        </>
-                      ) : (
-                        <>
-                          <HeartIcon className="w-4 h-4 inline mr-1" />
-                          Ajouter aux favoris
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
           {/* Message si aucune chambre */}
-          {filteredRooms.length === 0 && (
+          {rooms.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12 bg-white rounded-2xl shadow-sm"
+            >
+              <HomeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Aucune chambre en base de données
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Il semble que la base de données ne contienne aucune chambre active.
+              </p>
+              <button
+                onClick={fetchRoomsFromAPI}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Recharger
+              </button>
+            </motion.div>
+          )}
+
+          {/* Grille des chambres */}
+          {filteredRooms.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredRooms.map((room, index) => (
+                <motion.div
+                  key={room.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 + index * 0.1 }}
+                  className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-all ${
+                    favoriteRooms.includes(room.id) ? 'ring-2 ring-red-200' : ''
+                  }`}
+                >
+                  {/* Image */}
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={room.images && room.images[0] ? room.images[0] : '/api/placeholder/800/400'}
+                      alt={room.name}
+                      className="w-full h-full object-cover transition-transform hover:scale-105"
+                      onError={(e) => {
+                        e.target.src = '/api/placeholder/800/400'
+                      }}
+                    />
+                    <div className="absolute top-4 left-4">
+                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${getTypeColor(room.type)}`}>
+                        {getTypeLabel(room.type)}
+                      </span>
+                    </div>
+                    <div className="absolute top-4 right-4 flex space-x-2">
+                      {room.rating && (
+                        <div className="bg-white bg-opacity-90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center space-x-1">
+                          <StarIcon className="w-4 h-4 text-yellow-400" />
+                          <span className="text-sm font-medium">{room.rating}</span>
+                        </div>
+                      )}
+                      {favoriteRooms.includes(room.id) && (
+                        <div className="bg-red-500 rounded-full p-1">
+                          <HeartIconSolid className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contenu */}
+                  <div className="p-6">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                          {room.name}
+                          {favoriteRooms.includes(room.id) && (
+                            <HeartIconSolid className="w-4 h-4 text-red-500 inline ml-2" />
+                          )}
+                        </h3>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          <div className="flex items-center space-x-1">
+                            <UsersIcon className="w-4 h-4" />
+                            <span>{room.capacity} pers.</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <HomeIcon className="w-4 h-4" />
+                            <span>{room.size}m²</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {room.price}€
+                        </div>
+                        <div className="text-sm text-gray-500">par nuit</div>
+                      </div>
+                    </div>
+
+                    <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                      {room.description}
+                    </p>
+
+                    {/* Équipements */}
+                    {room.amenities && room.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {room.amenities.slice(0, 3).map((amenity, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full"
+                          >
+                            {amenity.includes('WiFi') && <WifiIcon className="w-3 h-3 mr-1" />}
+                            {amenity.includes('TV') && <TvIcon className="w-3 h-3 mr-1" />}
+                            {amenity.length > 20 ? amenity.slice(0, 20) + '...' : amenity}
+                          </span>
+                        ))}
+                        {room.amenities.length > 3 && (
+                          <span className="text-xs text-blue-600">
+                            +{room.amenities.length - 3} autres
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reviews */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-1">
+                        {room.rating ? (
+                          <>
+                            <div className="flex">
+                              {[...Array(5)].map((_, i) => (
+                                <StarIcon
+                                  key={i}
+                                  className={`w-4 h-4 ${
+                                    i < Math.floor(room.rating) 
+                                      ? 'text-yellow-400' 
+                                      : 'text-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-sm text-gray-600">
+                              ({room.reviewCount || 0} avis)
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-sm text-gray-500">Pas encore d'avis</span>
+                        )}
+                      </div>
+                      {room.available && (
+                        <div className="flex items-center space-x-1 text-green-600">
+                          <CheckCircleIcon className="w-4 h-4" />
+                          <span className="text-xs font-medium">Disponible</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="space-y-2">
+                      <Link
+                        href={`/rooms/${room.id}`}
+                        className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center block"
+                      >
+                        {user.isActive ? 'Voir les détails & Réserver' : 'Voir les détails'}
+                      </Link>
+                      <button
+                        onClick={() => toggleFavorite(room.id)}
+                        className={`w-full border py-2 rounded-lg transition-colors text-sm font-medium ${
+                          favoriteRooms.includes(room.id) 
+                            ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100' 
+                            : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {favoriteRooms.includes(room.id) ? (
+                          <>
+                            <HeartIconSolid className="w-4 h-4 inline mr-1" />
+                            Retirer des favoris
+                          </>
+                        ) : (
+                          <>
+                            <HeartIcon className="w-4 h-4 inline mr-1" />
+                            Ajouter aux favoris
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* Message si aucune chambre filtrée */}
+          {rooms.length > 0 && filteredRooms.length === 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -710,7 +607,7 @@ export default function Rooms() {
             >
               <HomeIcon className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Aucune chambre trouvée
+                Aucune chambre ne correspond aux filtres
               </h3>
               <p className="text-gray-600 mb-4">
                 Essayez de modifier vos critères de recherche
@@ -719,7 +616,7 @@ export default function Rooms() {
                 onClick={() => setFilters({type: '', minPrice: '', maxPrice: '', capacity: '', search: ''})}
                 className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Voir toutes les chambres
+                Réinitialiser les filtres
               </button>
             </motion.div>
           )}
@@ -732,7 +629,7 @@ export default function Rooms() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Chambres Hotel Luxe • Favoris fonctionnels • Développé par msylla01 • 2025-10-02 00:31:15 UTC
+              Chambres Hotel Luxe • Données réelles PostgreSQL • msylla01 • 2025-10-02 00:52:45 UTC
             </p>
           </motion.div>
         </main>
