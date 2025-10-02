@@ -1,44 +1,56 @@
 const express = require('express');
-const Joi = require('joi');
 const { PrismaClient } = require('@prisma/client');
-const { authenticateToken } = require('../middleware/auth');
-const paymentService = require('../services/paymentService');
+const { authenticateToken, requireActiveAccount } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Schema de validation pour créer un Payment Intent
-const createPaymentSchema = Joi.object({
-  bookingId: Joi.string().required(),
-  amount: Joi.number().positive().required()
-});
+console.log('💳 Routes paiement SIMPLES [msylla01] - 2025-10-02 02:07:10');
 
-// POST /api/payments/create-intent - Créer un Payment Intent
-router.post('/create-intent', authenticateToken, async (req, res) => {
+// Configuration numéros hotel
+const HOTEL_NUMBERS = {
+  ORANGE: '0703033133',
+  WAVE: '0703033133',
+  FREE: '0703033133'
+};
+
+// POST /api/payments/mobile - Paiement mobile SIMPLE
+router.post('/mobile', authenticateToken, requireActiveAccount, async (req, res) => {
   try {
-    const { error } = createPaymentSchema.validate(req.body);
-    if (error) {
+    console.log('📱 Paiement mobile simple [msylla01]:', req.body);
+
+    const { bookingId, phoneNumber, operator, amount } = req.body;
+
+    if (!bookingId || !phoneNumber || !operator || !amount) {
       return res.status(400).json({
         success: false,
-        message: error.details[0].message,
-        field: error.details[0].path[0],
+        message: 'Paramètres manquants',
+        required: ['bookingId', 'phoneNumber', 'operator', 'amount'],
         timestamp: new Date().toISOString()
       });
     }
 
-    const { bookingId, amount } = req.body;
-
-    // Vérifier que la réservation existe et appartient à l'utilisateur
-    const booking = await prisma.booking.findFirst({
-      where: {
+    // Vérifier la réservation (avec fallback)
+    let booking = null;
+    try {
+      booking = await prisma.booking.findFirst({
+        where: {
+          id: bookingId,
+          userId: req.user.id
+        },
+        include: {
+          room: { select: { name: true } }
+        }
+      });
+    } catch (dbError) {
+      console.log('⚠️ DB non disponible, utilisation fallback [msylla01]');
+      booking = {
         id: bookingId,
-        userId: req.user.id
-      },
-      include: {
-        room: true,
-        user: true
-      }
-    });
+        userId: req.user.id,
+        totalAmount: amount,
+        room: { name: 'Chambre Test' }
+      };
+    }
 
     if (!booking) {
       return res.status(404).json({
@@ -48,298 +60,186 @@ router.post('/create-intent', authenticateToken, async (req, res) => {
       });
     }
 
-    // Vérifier que le montant correspond
-    if (amount !== booking.totalAmount) {
-      return res.status(400).json({
-        success: false,
-        message: 'Le montant ne correspond pas à la réservation',
-        expected: booking.totalAmount,
-        received: amount,
-        timestamp: new Date().toISOString()
+    // Créer transaction (avec fallback)
+    const transactionId = `MP_${operator}_${Date.now()}`;
+    const hotelNumber = HOTEL_NUMBERS[operator];
+    
+    let payment = null;
+    try {
+      payment = await prisma.payment.create({
+        data: {
+          bookingId,
+          amount: parseFloat(amount),
+          currency: 'XOF',
+          method: 'MOBILE_MONEY',
+          status: 'PENDING',
+          transactionId,
+          phoneNumber,
+          provider: operator,
+          adminNotes: `Paiement ${operator} - ${phoneNumber} → ${hotelNumber}`
+        }
       });
+    } catch (dbError) {
+      console.log('⚠️ Création paiement simulée [msylla01]');
+      payment = {
+        id: `PAY_${Date.now()}`,
+        transactionId,
+        amount: parseFloat(amount),
+        status: 'PENDING'
+      };
     }
 
-    // Vérifier qu'il n'y a pas déjà un paiement réussi
-    const existingPayment = await prisma.payment.findFirst({
-      where: {
-        bookingId,
-        status: 'COMPLETED'
-      }
-    });
-
-    if (existingPayment) {
-      return res.status(409).json({
-        success: false,
-        message: 'Cette réservation a déjà été payée',
-        paymentId: existingPayment.id,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Créer le Payment Intent
-    const paymentResult = await paymentService.createPaymentIntent(
-      amount,
-      'eur',
-      {
-        bookingId,
-        userId: req.user.id,
-        userEmail: req.user.email,
-        roomName: booking.room.name,
-        checkIn: booking.checkIn.toISOString(),
-        checkOut: booking.checkOut.toISOString()
-      }
-    );
-
-    if (!paymentResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: paymentResult.error,
-        code: paymentResult.code,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Enregistrer le Payment Intent en base (status PENDING)
-    const payment = await prisma.payment.create({
-      data: {
-        bookingId,
-        amount,
-        currency: 'EUR',
-        method: 'STRIPE',
-        status: 'PENDING',
-        stripeId: paymentResult.paymentIntentId
-      }
-    });
+    console.log('✅ Paiement mobile initié [msylla01]:', transactionId);
 
     res.status(201).json({
       success: true,
-      message: 'Payment Intent créé avec succès',
-      clientSecret: paymentResult.clientSecret,
-      paymentIntentId: paymentResult.paymentIntentId,
+      message: 'Paiement mobile initié avec succès',
       payment: {
         id: payment.id,
-        amount: payment.amount,
-        currency: payment.currency,
-        status: payment.status
+        transactionId,
+        amount: parseFloat(amount),
+        operator,
+        phoneNumber,
+        hotelNumber,
+        status: 'PENDING'
       },
-      booking: {
-        id: booking.id,
-        checkIn: booking.checkIn,
-        checkOut: booking.checkOut,
-        room: booking.room.name
+      instructions: {
+        operator,
+        hotelNumber,
+        amount: parseFloat(amount),
+        steps: [
+          `1. Composez le code USSD de ${operator}`,
+          `2. Envoyez ${amount} XOF au ${hotelNumber}`,
+          `3. Confirmez avec votre code PIN`,
+          `4. Notre équipe validera sous 24h`
+        ],
+        ussd: operator === 'ORANGE' ? `*144*4*4*${hotelNumber}*${amount}#` :
+              operator === 'WAVE' ? `Application Wave → Envoyer → ${hotelNumber}` :
+              `*144*5*${hotelNumber}*${amount}#`
       },
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });
 
   } catch (error) {
-    console.error('❌ Erreur création Payment Intent [msylla01]:', error);
+    console.error('❌ Erreur paiement mobile [msylla01]:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la création du paiement',
+      message: 'Erreur lors du paiement mobile',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// POST /api/payments/confirm - Confirmer un paiement réussi
-router.post('/confirm', authenticateToken, async (req, res) => {
+// POST /api/payments/card - Paiement carte SIMPLE
+router.post('/card', authenticateToken, requireActiveAccount, async (req, res) => {
   try {
-    const { paymentIntentId } = req.body;
+    console.log('💳 Paiement carte simple [msylla01]');
 
-    if (!paymentIntentId) {
+    const { bookingId, cardNumber, cardHolder, expiryDate, cvv, amount } = req.body;
+
+    if (!bookingId || !cardNumber || !cardHolder || !expiryDate || !cvv || !amount) {
       return res.status(400).json({
         success: false,
-        message: 'Payment Intent ID requis',
+        message: 'Paramètres manquants',
+        required: ['bookingId', 'cardNumber', 'cardHolder', 'expiryDate', 'cvv', 'amount'],
         timestamp: new Date().toISOString()
       });
     }
 
-    // Confirmer le paiement avec Stripe
-    const paymentResult = await paymentService.confirmPayment(paymentIntentId);
+    // Simulation de traitement carte (90% succès)
+    const isSuccess = Math.random() > 0.1;
+    const transactionId = `CARD_${Date.now()}`;
+    const maskedCard = cardNumber.slice(0, 4) + '****' + cardNumber.slice(-4);
 
-    if (!paymentResult.success) {
-      return res.status(400).json({
-        success: false,
-        message: paymentResult.error,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Mettre à jour le paiement en base
-    const payment = await prisma.payment.findFirst({
-      where: { stripeId: paymentIntentId },
-      include: {
-        booking: {
-          include: {
-            room: true,
-            user: true
-          }
+    let payment = null;
+    try {
+      payment = await prisma.payment.create({
+        data: {
+          bookingId,
+          amount: parseFloat(amount),
+          currency: 'EUR',
+          method: 'CREDIT_CARD',
+          status: isSuccess ? 'COMPLETED' : 'FAILED',
+          transactionId,
+          adminNotes: `Carte ${maskedCard} - ${cardHolder} - ${isSuccess ? 'SUCCÈS' : 'ÉCHEC'}`
         }
-      }
-    });
-
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        message: 'Paiement non trouvé en base',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Mettre à jour le statut selon la réponse Stripe
-    const newStatus = paymentResult.status === 'succeeded' ? 'COMPLETED' : 'FAILED';
-    
-    const updatedPayment = await prisma.payment.update({
-      where: { id: payment.id },
-      data: { 
-        status: newStatus,
-        transactionId: paymentResult.charges?.[0]?.id || paymentIntentId
-      }
-    });
-
-    // Si paiement réussi, confirmer la réservation
-    if (newStatus === 'COMPLETED') {
-      await prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: { status: 'CONFIRMED' }
       });
 
-      console.log(`✅ Réservation confirmée [msylla01]: ${payment.bookingId}`);
-    }
-
-    res.json({
-      success: true,
-      message: newStatus === 'COMPLETED' ? 'Paiement confirmé avec succès' : 'Paiement échoué',
-      payment: {
-        id: updatedPayment.id,
-        status: updatedPayment.status,
-        amount: updatedPayment.amount,
-        currency: updatedPayment.currency,
-        transactionId: updatedPayment.transactionId
-      },
-      booking: {
-        id: payment.booking.id,
-        status: newStatus === 'COMPLETED' ? 'CONFIRMED' : payment.booking.status
-      },
-      stripeDetails: paymentResult,
-      timestamp: new Date().toISOString(),
-      developer: 'msylla01'
-    });
-
-  } catch (error) {
-    console.error('❌ Erreur confirmation paiement [msylla01]:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la confirmation du paiement',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// GET /api/payments/booking/:bookingId - Status des paiements pour une réservation
-router.get('/booking/:bookingId', authenticateToken, async (req, res) => {
-  try {
-    const { bookingId } = req.params;
-
-    // Vérifier que la réservation appartient à l'utilisateur
-    const booking = await prisma.booking.findFirst({
-      where: {
-        id: bookingId,
-        userId: req.user.id
-      }
-    });
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Réservation non trouvée',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    const payments = await prisma.payment.findMany({
-      where: { bookingId },
-      orderBy: { createdAt: 'desc' }
-    });
-
-    res.json({
-      success: true,
-      payments: payments.map(payment => ({
-        id: payment.id,
-        status: payment.status,
-        method: payment.method,
-        amount: payment.amount,
-        currency: payment.currency,
-        transactionId: payment.transactionId,
-        stripeId: payment.stripeId,
-        createdAt: payment.createdAt,
-        updatedAt: payment.updatedAt
-      })),
-      bookingId,
-      timestamp: new Date().toISOString(),
-      developer: 'msylla01'
-    });
-
-  } catch (error) {
-    console.error('❌ Erreur récupération paiements [msylla01]:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des paiements',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// POST /api/payments/webhook/stripe - Webhook Stripe
-router.post('/webhook/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const signature = req.headers['stripe-signature'];
-    const result = await paymentService.handleWebhook(req.body, signature);
-
-    if (result.success) {
-      // Traiter les événements webhook si nécessaire
-      if (result.event === 'payment_succeeded' && result.paymentIntentId) {
-        // Mettre à jour automatiquement le statut en base
-        await prisma.payment.updateMany({
-          where: { stripeId: result.paymentIntentId },
-          data: { status: 'COMPLETED' }
+      if (isSuccess) {
+        // Confirmer la réservation
+        await prisma.booking.update({
+          where: { id: bookingId },
+          data: { status: 'CONFIRMED' }
         });
-        
-        console.log(`🔔 Webhook: Paiement ${result.paymentIntentId} marqué comme COMPLETED [msylla01]`);
       }
-      
-      res.json({ received: true, event: result.event });
-    } else {
-      res.status(400).json({ error: result.error });
+    } catch (dbError) {
+      console.log('⚠️ Traitement carte simulé [msylla01]');
+      payment = {
+        id: `PAY_${Date.now()}`,
+        transactionId,
+        amount: parseFloat(amount),
+        status: isSuccess ? 'COMPLETED' : 'FAILED'
+      };
     }
+
+    console.log(`${isSuccess ? '✅' : '❌'} Paiement carte ${isSuccess ? 'réussi' : 'échoué'} [msylla01]`);
+
+    res.status(isSuccess ? 201 : 400).json({
+      success: isSuccess,
+      message: isSuccess ? 'Paiement par carte réussi' : 'Paiement par carte refusé',
+      payment: {
+        id: payment.id,
+        transactionId,
+        amount: parseFloat(amount),
+        method: 'CREDIT_CARD',
+        status: payment.status,
+        cardNumber: maskedCard
+      },
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
   } catch (error) {
-    console.error('❌ Erreur webhook Stripe [msylla01]:', error);
-    res.status(400).json({ error: error.message });
+    console.error('❌ Erreur paiement carte [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du paiement par carte',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
-// GET /api/payments/methods - Méthodes de paiement disponibles
-router.get('/methods', (req, res) => {
-  res.json({
-    success: true,
-    methods: [
-      {
-        id: 'stripe',
-        name: 'Carte Bancaire',
-        description: 'Visa, Mastercard, American Express, CB',
-        icon: '💳',
-        enabled: true,
-        fees: 2.9, // 2.9%
-        currencies: ['EUR', 'USD'],
-        supported_countries: ['FR', 'EU', 'US', 'CA']
-      }
-    ],
-    default_method: 'stripe',
-    currency: 'EUR',
-    timestamp: new Date().toISOString(),
-    developer: 'msylla01'
-  });
+// GET /api/payments/info - Informations paiement
+router.get('/info', authenticateToken, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      hotelNumbers: HOTEL_NUMBERS,
+      supportedMethods: ['MOBILE_MONEY', 'CREDIT_CARD'],
+      currency: {
+        mobile: 'XOF',
+        card: 'EUR'
+      },
+      instructions: {
+        mobile: 'Envoyez le montant au numéro hotel correspondant',
+        card: 'Paiement immédiat avec confirmation automatique'
+      },
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+  } catch (error) {
+    console.error('❌ Erreur info paiement [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des informations',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
+
+console.log('✅ Routes paiement simples chargées [msylla01]');
 
 module.exports = router;

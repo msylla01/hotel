@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { 
   ArrowLeftIcon,
+  BanknotesIcon,
   CalendarDaysIcon,
   UsersIcon,
   CreditCardIcon,
@@ -14,10 +15,8 @@ import {
   XCircleIcon,
   ClockIcon,
   DocumentTextIcon,
-  StarIcon,
-  BanknotesIcon
+  StarIcon
 } from '@heroicons/react/24/outline'
-import PaymentButton from '../../components/PaymentButton'
 
 export default function BookingDetail() {
   const router = useRouter()
@@ -25,7 +24,14 @@ export default function BookingDetail() {
   const [user, setUser] = useState(null)
   const [booking, setBooking] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelLoading, setCancelLoading] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState({
+    phoneNumber: '',
+    operator: 'ORANGE'
+  })
 
   useEffect(() => {
     const token = localStorage.getItem('hotel_token')
@@ -44,47 +50,113 @@ export default function BookingDetail() {
     }
   }, [router, id])
 
+  const handlePaymentSuccess = (payment) => {
+    setShowPaymentModal(false)
+    fetchBookingDetail() // Recharger les données
+    alert(`✅ Paiement enregistré !\n\nTransaction: ${payment.transactionId}\nStatut: ${payment.status}\n\nVotre réservation sera mise à jour sous peu.`)
+  }
+
   const fetchBookingDetail = async () => {
     try {
       setLoading(true)
-      setError(null)
       
-      console.log('📋 Récupération détail réservation [msylla01] - 2025-10-02 02:11:15:', id)
+      console.log('📋 Récupération détail réservation [msylla01] - 2025-10-02 01:26:51:', id)
       
       const token = localStorage.getItem('hotel_token')
-      
-      if (!token) {
-        throw new Error('Token manquant')
-      }
-      
       const response = await fetch(`http://localhost:5000/api/bookings/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
 
-      console.log('📡 Response status:', response.status, response.ok)
-
       if (response.ok) {
         const data = await response.json()
-        console.log('📊 Response data:', data)
-        
         if (data.success) {
           setBooking(data.booking)
           console.log('✅ Détail réservation récupéré [msylla01]:', data.booking.id)
         } else {
-          throw new Error(data.message || 'Erreur API')
+          throw new Error(data.message)
         }
       } else {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || `Erreur HTTP: ${response.status}`)
+        throw new Error(`Erreur HTTP: ${response.status}`)
       }
 
     } catch (error) {
       console.error('❌ Erreur récupération détail réservation [msylla01]:', error)
-      setError(error.message)
+      alert('Erreur lors du chargement des détails de la réservation')
+      router.push('/dashboard')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCancelBooking = async () => {
+    try {
+      setCancelLoading(true)
+      
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch(`http://localhost:5000/api/bookings/${id}/cancel`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason: cancelReason })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert('✅ Réservation annulée avec succès')
+        setShowCancelModal(false)
+        fetchBookingDetail() // Recharger les données
+      } else {
+        alert(`❌ ${data.message}`)
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur annulation [msylla01]:', error)
+      alert('Erreur lors de l\'annulation')
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
+  const handleInitiatePayment = async () => {
+    try {
+      if (!paymentData.phoneNumber) {
+        alert('Veuillez saisir votre numéro de téléphone')
+        return
+      }
+
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/mobile-payments/initiate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          bookingId: booking.id,
+          phoneNumber: paymentData.phoneNumber,
+          operator: paymentData.operator,
+          amount: booking.totalAmount
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(`💰 Paiement initié !\n\n${data.payment.instructions.details}\n\nVotre paiement sera confirmé par notre équipe dans les plus brefs délais.`)
+        setShowPaymentModal(false)
+        fetchBookingDetail()
+      } else {
+        alert(`❌ ${data.message}`)
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur paiement [msylla01]:', error)
+      alert('Erreur lors de l\'initiation du paiement')
     }
   }
 
@@ -111,7 +183,6 @@ export default function BookingDetail() {
     const paymentConfig = {
       'COMPLETED': { bg: 'bg-green-100', text: 'text-green-800', label: '💳 Payé' },
       'PENDING': { bg: 'bg-orange-100', text: 'text-orange-800', label: '💰 En attente' },
-      'PAID': { bg: 'bg-green-100', text: 'text-green-800', label: '💳 Payé' },
       'FAILED': { bg: 'bg-red-100', text: 'text-red-800', label: '❌ Échec' },
       'PROCESSING': { bg: 'bg-blue-100', text: 'text-blue-800', label: '🔄 En cours' }
     }
@@ -130,53 +201,13 @@ export default function BookingDetail() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des détails...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 02:11:15</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md">
-          <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Erreur de chargement</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <div className="space-y-2">
-            <button
-              onClick={fetchBookingDetail}
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors block w-full"
-            >
-              Réessayer
-            </button>
-            <Link
-              href="/dashboard"
-              className="text-blue-600 hover:text-blue-700 text-sm block"
-            >
-              ← Retour au dashboard
-            </Link>
-          </div>
         </div>
       </div>
     )
   }
 
   if (!booking || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Réservation non trouvée</h2>
-          <p className="text-gray-600 mb-4">Cette réservation n'existe pas ou vous n'y avez pas accès</p>
-          <Link
-            href="/dashboard"
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Retour au dashboard
-          </Link>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (
@@ -254,7 +285,7 @@ export default function BookingDetail() {
                 transition={{ delay: 0.2 }}
                 className="bg-white rounded-2xl shadow-sm p-6"
               >
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">📋 Détails de la réservation</h2>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">📋 Informations de la réservation</h2>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
@@ -318,9 +349,6 @@ export default function BookingDetail() {
                     src={booking.roomImage}
                     alt={booking.room.name}
                     className="w-full h-64 object-cover"
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800'
-                    }}
                   />
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900">{booking.room.name}</h3>
@@ -387,17 +415,26 @@ export default function BookingDetail() {
                 
                 <div className="space-y-4">
                   
-                  {/* Composant de paiement simple */}
-                  {booking.status === 'PENDING' && booking.paymentStatus === 'PENDING' && user.isActive && (
-                    <div className="mt-6">
-                      <PaymentButton
-                        booking={booking}
-                        onSuccess={(payment) => {
-                          fetchBookingDetail()
-                          alert(`✅ Paiement enregistré !\nTransaction: ${payment.transactionId}`)
-                        }}
-                      />
-                    </div>
+                  {/* Paiement si en attente */}
+                  {booking.status === 'PENDING' && booking.paymentStatus === 'PENDING' && (
+                    <button
+                      onClick={() => setShowPaymentModal(true)}
+                      className="w-full bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <CreditCardIcon className="w-5 h-5" />
+                      <span>Payer maintenant</span>
+                    </button>
+                  )}
+
+                  {/* Annulation si possible */}
+                  {booking.canCancel && (
+                    <button
+                      onClick={() => setShowCancelModal(true)}
+                      className="w-full border border-red-300 text-red-700 py-3 rounded-lg font-semibold hover:bg-red-50 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <XCircleIcon className="w-5 h-5" />
+                      <span>Annuler la réservation</span>
+                    </button>
                   )}
 
                   {/* Contact */}
@@ -419,27 +456,50 @@ export default function BookingDetail() {
                       <li>• Check-in: 14h00</li>
                       <li>• Check-out: 11h00</li>
                       <li>• Annulation gratuite 24h avant</li>
-                      <li>• Paiement mobile: 0703033133</li>
+                      <li>• Paiement mobile accepté</li>
                     </ul>
                   </div>
                 </div>
               </motion.div>
             </div>
           </div>
-
-          {/* Footer */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="mt-16 text-center text-gray-500"
-          >
-            <p className="text-sm">
-              Détail réservation Hotel Luxe • Paiement simple • msylla01 • 2025-10-02 02:11:15 UTC
-            </p>
-          </motion.div>
         </main>
-      </div>
-    </>
-  )
-}
+
+        {/* Modal d'annulation */}
+        {showCancelModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Annuler la réservation</h3>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Raison de l'annulation (optionnel)
+                </label>
+                <textarea
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="Changement de plans, empêchement..."
+                />
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowCancelModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Fermer
+                </button>
+                <button
+                  onClick={handleCancelBooking}
+                  disabled={cancelLoading}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {cancelLoading ? 'Annulation...' : 'Confirmer l\'annulation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+

@@ -61,9 +61,32 @@ export default function Dashboard() {
   }, [router])
 
   const handleCancelBooking = async (bookingId, roomName) => {
-    console.log('🎯 TENTATIVE ANNULATION [msylla01] - 2025-10-02 01:43:49:', bookingId, roomName)
+    console.log('🎯 TENTATIVE ANNULATION [msylla01] - 2025-10-02 02:27:14:', bookingId, roomName)
     
-    const confirmCancel = window.confirm(`Êtes-vous sûr de vouloir annuler votre réservation pour "${roomName}" ?\n\nCette action est irréversible.`)
+    // Vérifier d'abord le statut de la réservation
+    const currentBooking = bookings.find(b => b.id === bookingId)
+    
+    if (!currentBooking) {
+      alert('❌ Réservation non trouvée')
+      return
+    }
+    
+    if (currentBooking.status === 'CANCELLED') {
+      alert('❌ Cette réservation est déjà annulée')
+      return
+    }
+    
+    if (currentBooking.status === 'COMPLETED') {
+      alert('❌ Impossible d\'annuler une réservation terminée')
+      return
+    }
+    
+    if (!currentBooking.canCancel) {
+      alert('❌ Cette réservation ne peut plus être annulée (moins de 24h avant l\'arrivée)')
+      return
+    }
+    
+    const confirmCancel = window.confirm(`Êtes-vous sûr de vouloir annuler votre réservation ?\n\n📋 Réservation: ${bookingId}\n🏨 Chambre: ${roomName}\n💰 Montant: ${currentBooking.totalAmount}€\n📅 Du ${new Date(currentBooking.checkIn).toLocaleDateString('fr-FR')} au ${new Date(currentBooking.checkOut).toLocaleDateString('fr-FR')}\n\n⚠️ Cette action est irréversible.`)
     
     if (!confirmCancel) {
       console.log('❌ Annulation annulée par utilisateur [msylla01]')
@@ -76,6 +99,7 @@ export default function Dashboard() {
       console.log('📡 Envoi requête annulation [msylla01]:', {
         bookingId,
         reason,
+        currentStatus: currentBooking.status,
         url: `http://localhost:5000/api/bookings/${bookingId}/cancel`
       })
       
@@ -102,7 +126,7 @@ export default function Dashboard() {
       console.log('📊 Response data [msylla01]:', data)
       
       if (data.success) {
-        alert(`✅ Réservation annulée avec succès !\n\nRéférence: ${bookingId}\nChambre: ${roomName}\nRaison: ${reason}`)
+        alert(`✅ Réservation annulée avec succès !\n\n📋 Référence: ${bookingId}\n🏨 Chambre: ${roomName}\n📝 Raison: ${reason}\n💰 Remboursement: ${data.refundEligible ? 'Éligible' : 'Non éligible'}\n\n🔄 Actualisation des données...`)
         console.log('✅ ANNULATION RÉUSSIE [msylla01]:', bookingId)
         fetchRealDashboardData() // Recharger les données
       } else {
@@ -131,7 +155,7 @@ export default function Dashboard() {
         return
       }
 
-      console.log('📊 Récupération données dashboard DB RÉELLES [msylla01] - 2025-10-02 01:43:49')
+      console.log('📊 Récupération données dashboard DB RÉELLES [msylla01] - 2025-10-02 02:27:14')
 
       const [bookingsResponse, statsResponse] = await Promise.all([
         fetch('http://localhost:5000/api/bookings', {
@@ -278,7 +302,7 @@ export default function Dashboard() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement de vos données...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 01:43:49</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 02:27:14</p>
         </div>
       </div>
     )
@@ -631,32 +655,44 @@ export default function Dashboard() {
                                 </Link>
                                 
                                 {booking.status === 'PENDING' && booking.paymentStatus === 'PENDING' && user.isActive && (
-                                  <Link
-                                    href={`/bookings/${booking.id}#payment`}
+                                  <button
+                                    onClick={() => {
+                                      window.location.href = `/bookings/${booking.id}#payment`
+                                    }}
                                     className="text-green-600 hover:text-green-700 text-xs font-medium hover:bg-green-50 px-2 py-1 rounded"
                                   >
-                                    💳 Payer
-                                  </Link>
+                                    💳 Payer ({booking.totalAmount}€)
+                                  </button>
                                 )}
                                 
-                                {booking.canCancel && user.isActive && booking.status !== 'CANCELLED' && (
+                                {booking.status === 'PENDING' && booking.canCancel && user.isActive && (
                                   <button 
                                     onClick={() => handleCancelBooking(booking.id, booking.room.name)}
                                     className="text-red-600 hover:text-red-700 text-xs font-medium hover:bg-red-50 px-2 py-1 rounded"
+                                    title="Annuler cette réservation"
                                   >
                                     ❌ Annuler
                                   </button>
                                 )}
                                 
                                 {booking.status === 'CONFIRMED' && (
-                                  <span className="text-green-600 text-xs font-medium px-2 py-1 bg-green-50 rounded">
-                                    ✅ Confirmée
+                                  <span className="text-green-600 text-xs font-medium px-2 py-1 bg-green-50 rounded flex items-center space-x-1">
+                                    <CheckCircleIcon className="w-3 h-3" />
+                                    <span>Confirmée</span>
                                   </span>
                                 )}
                                 
                                 {booking.status === 'CANCELLED' && (
-                                  <span className="text-red-600 text-xs font-medium px-2 py-1 bg-red-50 rounded">
-                                    ❌ Annulée
+                                  <span className="text-red-600 text-xs font-medium px-2 py-1 bg-red-50 rounded flex items-center space-x-1">
+                                    <XCircleIcon className="w-3 h-3" />
+                                    <span>Annulée</span>
+                                  </span>
+                                )}
+                                
+                                {booking.status === 'COMPLETED' && (
+                                  <span className="text-blue-600 text-xs font-medium px-2 py-1 bg-blue-50 rounded flex items-center space-x-1">
+                                    <CheckCircleIcon className="w-3 h-3" />
+                                    <span>Terminée</span>
                                   </span>
                                 )}
                               </div>
@@ -664,8 +700,14 @@ export default function Dashboard() {
                               <div className="text-xs text-gray-500 text-right">
                                 <div>#{booking.id.slice(-8)}</div>
                                 <div>{new Date(booking.createdAt).toLocaleDateString('fr-FR')}</div>
-                                {booking.canCancel && booking.status !== 'CANCELLED' && (
-                                  <div className="text-green-600">Annulable</div>
+                                {booking.status === 'PENDING' && booking.canCancel && (
+                                  <div className="text-green-600">✅ Annulable</div>
+                                )}
+                                {booking.status === 'PENDING' && !booking.canCancel && (
+                                  <div className="text-orange-600">⏰ Non annulable</div>
+                                )}
+                                {booking.status === 'CANCELLED' && (
+                                  <div className="text-red-600">❌ Annulée</div>
                                 )}
                               </div>
                             </div>
@@ -912,7 +954,7 @@ export default function Dashboard() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Dashboard Hotel Luxe • Données réelles PostgreSQL • Annulation et détails fonctionnels • msylla01 • 2025-10-02 01:43:49 UTC
+              Dashboard Hotel Luxe • Données réelles PostgreSQL • Annulation conditionnelle • msylla01 • 2025-10-02 02:27:14 UTC
             </p>
           </motion.div>
         </main>
