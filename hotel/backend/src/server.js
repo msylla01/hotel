@@ -28,6 +28,7 @@ try {
   const roomRoutes = require('./routes/rooms');
   const bookingRoutes = require('./routes/bookings');
   const favoritesRoutes = require('./routes/favorites'); // AJOUTÉ
+  const mobilePaymentsRoutes = require('./routes/mobile-payments');
   const paymentRoutes = require('./routes/payments');
   const adminRoutes = require('./routes/admin');
   const emailRoutes = require('./routes/emails');
@@ -45,6 +46,7 @@ try {
   // Routes qui nécessitent juste une authentification (même compte désactivé)
   app.use('/api/users', authenticateToken, userRoutes);
   app.use('/api/favorites', authenticateToken, favoritesRoutes); // AJOUTÉ
+  app.use('/api/mobile-payments', authenticateToken, mobilePaymentsRoutes);
 
   // Routes qui nécessitent un compte ACTIF
   app.use('/api/bookings', authenticateToken, requireActiveAccount, bookingRoutes);

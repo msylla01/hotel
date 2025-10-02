@@ -5,51 +5,55 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /api/favorites - Mes chambres favorites
+console.log('❤️ Routes favoris complètes [msylla01] - 2025-10-02 01:26:51');
+
+// GET /api/favorites - Mes chambres favorites avec vraies données
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    console.log('❤️ Récupération favoris [msylla01] - 2025-10-02 00:27:12:', req.user.id);
+    console.log('❤️ Récupération favoris [msylla01] - 2025-10-02 01:26:51:', req.user.id);
 
-    // Simuler des favoris pour l'instant
-    const favorites = [
-      {
-        id: 'fav_1',
-        userId: req.user.id,
-        roomId: 'room_2',
-        createdAt: new Date(),
-        room: {
-          id: 'room_2',
-          name: 'Chambre Double Prestige',
-          type: 'DOUBLE',
-          price: 180,
-          images: ['https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&auto=format&fit=crop'],
-          rating: 4.5,
-          reviewCount: 128
-        }
-      },
-      {
-        id: 'fav_2',
-        userId: req.user.id,
-        roomId: 'room_5',
-        createdAt: new Date(),
-        room: {
-          id: 'room_5',
-          name: 'Suite Présidentielle Deluxe',
-          type: 'DELUXE',
-          price: 450,
-          images: ['https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&auto=format&fit=crop'],
-          rating: 4.9,
-          reviewCount: 34
+    // Pour l'instant, simuler avec localStorage côté client
+    // En production, créer une table favorites dans Prisma
+    
+    // Récupérer toutes les chambres pour permettre le filtrage côté client
+    const rooms = await prisma.room.findMany({
+      where: { isActive: true },
+      include: {
+        reviews: {
+          where: { isApproved: true },
+          select: { rating: true }
+        },
+        _count: {
+          select: {
+            reviews: { where: { isApproved: true } }
+          }
         }
       }
-    ];
+    });
 
-    console.log(`✅ ${favorites.length} favoris trouvés [msylla01]`);
+    // Calculer ratings
+    const roomsWithRating = rooms.map(room => {
+      const reviews = room.reviews;
+      const avgRating = reviews.length > 0 
+        ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length 
+        : null;
+      
+      return {
+        ...room,
+        rating: avgRating ? Math.round(avgRating * 10) / 10 : null,
+        reviewCount: room._count.reviews,
+        reviews: undefined,
+        _count: undefined
+      };
+    });
+
+    console.log(`✅ ${roomsWithRating.length} chambres disponibles pour favoris [msylla01]`);
 
     res.json({
       success: true,
-      favorites,
-      total: favorites.length,
+      message: 'Chambres disponibles pour favoris (gestion côté client)',
+      rooms: roomsWithRating,
+      total: roomsWithRating.length,
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });
@@ -64,10 +68,10 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/favorites - Ajouter aux favoris
+// POST /api/favorites - Ajouter aux favoris (simulation)
 router.post('/', authenticateToken, async (req, res) => {
   try {
-    console.log('❤️ Ajout favori [msylla01] - 2025-10-02 00:27:12:', req.body);
+    console.log('❤️ Ajout favori [msylla01] - 2025-10-02 01:26:51:', req.body);
 
     const { roomId } = req.body;
 
@@ -81,15 +85,16 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     // Vérifier que la chambre existe
-    const mockRooms = {
-      'room_1': { id: 'room_1', name: 'Chambre Simple Confort', price: 120 },
-      'room_2': { id: 'room_2', name: 'Chambre Double Prestige', price: 180 },
-      'room_3': { id: 'room_3', name: 'Suite Junior Executive', price: 350 },
-      'room_4': { id: 'room_4', name: 'Chambre Familiale Spacieuse', price: 250 },
-      'room_5': { id: 'room_5', name: 'Suite Présidentielle Deluxe', price: 450 }
-    };
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        price: true
+      }
+    });
 
-    const room = mockRooms[roomId];
     if (!room) {
       return res.status(404).json({
         success: false,
@@ -98,21 +103,13 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
 
-    // Simuler l'ajout
-    const favorite = {
-      id: 'fav_' + Date.now(),
-      userId: req.user.id,
-      roomId,
-      createdAt: new Date(),
-      room
-    };
-
-    console.log('✅ Favori ajouté [msylla01]:', favorite.id);
+    console.log('✅ Favori validé [msylla01]:', roomId, room.name);
 
     res.status(201).json({
       success: true,
       message: 'Chambre ajoutée aux favoris',
-      favorite,
+      room: room,
+      note: 'Favoris gérés côté client avec localStorage',
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });
@@ -130,16 +127,35 @@ router.post('/', authenticateToken, async (req, res) => {
 // DELETE /api/favorites/:roomId - Retirer des favoris
 router.delete('/:roomId', authenticateToken, async (req, res) => {
   try {
-    console.log('💔 Suppression favori [msylla01] - 2025-10-02 00:27:12:', req.params.roomId);
+    console.log('💔 Suppression favori [msylla01] - 2025-10-02 01:26:51:', req.params.roomId);
 
     const { roomId } = req.params;
 
-    console.log('✅ Favori supprimé [msylla01]:', roomId);
+    // Vérifier que la chambre existe
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: {
+        id: true,
+        name: true
+      }
+    });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chambre non trouvée',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log('✅ Favori supprimé [msylla01]:', roomId, room.name);
 
     res.json({
       success: true,
       message: 'Chambre retirée des favoris',
       roomId,
+      roomName: room.name,
+      note: 'Favoris gérés côté client avec localStorage',
       timestamp: new Date().toISOString(),
       developer: 'msylla01'
     });
