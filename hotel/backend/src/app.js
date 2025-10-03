@@ -39,6 +39,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/rooms', require('./routes/rooms'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use("/api/reviews", require("./routes/reviews"));
+app.use("/api/admin", require("./routes/admin"));
 
 // Route par défaut
 app.get('/', (req, res) => {

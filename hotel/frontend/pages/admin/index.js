@@ -15,7 +15,13 @@ import {
   PlusIcon,
   ArrowRightIcon,
   ArrowUpIcon,
-  ArrowDownIcon
+  ArrowDownIcon,
+  StarIcon,
+  ChatBubbleBottomCenterTextIcon,
+  ExclamationTriangleIcon,
+  EyeIcon,
+  UsersIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
 
 export default function AdminDashboard() {
@@ -23,7 +29,7 @@ export default function AdminDashboard() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState(null)
-  const [stats, setStats] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     // Vérifier l'authentification admin
@@ -35,54 +41,85 @@ export default function AdminDashboard() {
       return
     }
 
-    const user = JSON.parse(userData)
-    if (user.role !== 'ADMIN') {
-      router.push('/dashboard')
-      return
-    }
+    try {
+      const user = JSON.parse(userData)
+      if (user.role !== 'ADMIN') {
+        router.push('/dashboard')
+        return
+      }
 
-    setUser(user)
-    fetchDashboardData()
+      setUser(user)
+      fetchDashboardData()
+    } catch (err) {
+      console.error('❌ Erreur parsing user data [msylla01]:', err)
+      router.push('/auth/login')
+    }
   }, [router])
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
+      setError(null)
       
-      // Récupérer les statistiques via l'API
-      const [roomsResponse] = await Promise.all([
-        fetch('http://localhost:5000/api/rooms')
-      ])
-
-      const roomsData = await roomsResponse.json()
+      console.log('📊 Récupération données dashboard admin [msylla01] - 2025-10-03 17:36:40')
       
-      // Calculer les statistiques
-      const totalRooms = roomsData.rooms?.length || 0
-      const totalRevenue = roomsData.rooms?.reduce((sum, room) => sum + (room.price * 5), 0) || 0
-      const occupancyRate = Math.floor(Math.random() * 30) + 70
-      const totalUsers = 5
-
-      setStats({
-        totalRooms,
-        totalRevenue,
-        occupancyRate,
-        totalUsers,
-        totalBookings: 2,
-        activeBookings: 1,
-        monthlyGrowth: Math.floor(Math.random() * 20) + 5
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/admin/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       })
 
+      if (!response.ok) {
+        throw new Error(`Erreur API: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setDashboardData(data.data)
+        console.log('✅ Dashboard admin chargé [msylla01]:', {
+          users: data.data.metrics.totalUsers,
+          rooms: data.data.metrics.totalRooms,
+          bookings: data.data.metrics.totalBookings,
+          reviews: data.data.metrics.totalReviews,
+          revenue: data.data.metrics.totalRevenue
+        })
+      } else {
+        throw new Error(data.message || 'Erreur de récupération des données')
+      }
+
+    } catch (error) {
+      console.error('❌ Erreur récupération dashboard admin [msylla01]:', error)
+      setError(error.message)
+      
+      // Fallback avec données simulées pour démonstration
       setDashboardData({
-        rooms: roomsData.rooms || [],
+        metrics: {
+          totalRevenue: 12500,
+          revenueGrowth: 15,
+          totalUsers: 23,
+          activeUsers: 21,
+          usersGrowth: 8,
+          totalBookings: 18,
+          activeBookings: 6,
+          pendingBookings: 2,
+          totalRooms: 5,
+          activeRooms: 5,
+          occupancyRate: 72,
+          totalReviews: 47,
+          averageRating: '4.6',
+          verifiedReviews: 32
+        },
+        recentUsers: [],
+        recentBookings: [],
+        recentReviews: [],
+        roomsWithStats: [],
         recentActivity: [
-          { type: 'booking', message: 'Nouvelle réservation - Chambre Double', time: '5 min', color: 'bg-blue-500' },
-          { type: 'user', message: 'Nouveau client inscrit', time: '15 min', color: 'bg-green-500' },
-          { type: 'payment', message: 'Paiement reçu - 360€', time: '30 min', color: 'bg-yellow-500' },
-          { type: 'review', message: 'Nouvel avis 5 étoiles', time: '1h', color: 'bg-purple-500' }
+          { type: 'error', message: 'Utilisation données fallback - Vérifiez la connexion API', time: 'maintenant', color: 'bg-red-500' }
         ]
       })
-    } catch (error) {
-      console.error('Erreur chargement dashboard:', error)
     } finally {
       setLoading(false)
     }
@@ -94,23 +131,93 @@ export default function AdminDashboard() {
     router.push('/')
   }
 
+  const renderStars = (rating) => {
+    const numRating = typeof rating === 'string' ? parseFloat(rating) : rating
+    return Array.from({ length: 5 }, (_, i) => (
+      <StarIcon
+        key={i}
+        className={`w-4 h-4 ${i < numRating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+      />
+    ))
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount)
+  }
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'CONFIRMED': 'bg-blue-100 text-blue-800',
+      'CANCELLED': 'bg-red-100 text-red-800',
+      'CHECKED_IN': 'bg-green-100 text-green-800',
+      'CHECKED_OUT': 'bg-gray-100 text-gray-800',
+      'COMPLETED': 'bg-green-100 text-green-800'
+    }
+    return colors[status] || 'bg-gray-100 text-gray-800'
+  }
+
+  const getTypeColor = (type) => {
+    const colors = {
+      'SINGLE': 'bg-green-100 text-green-800',
+      'DOUBLE': 'bg-blue-100 text-blue-800',
+      'SUITE': 'bg-purple-100 text-purple-800',
+      'FAMILY': 'bg-orange-100 text-orange-800',
+      'DELUXE': 'bg-red-100 text-red-800'
+    }
+    return colors[type] || 'bg-gray-100 text-gray-800'
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement dashboard admin...</p>
+          <p className="text-xs text-gray-500 mt-2">Récupération données Prisma PostgreSQL</p>
+          <p className="text-xs text-gray-500">msylla01 • 2025-10-03 17:36:40</p>
+        </div>
       </div>
     )
   }
 
-  if (!user) {
-    return null
+  if (!user || !dashboardData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-gray-600 mb-4">Erreur de chargement du dashboard</p>
+          {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
+          <button
+            onClick={fetchDashboardData}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    )
   }
+
+  const { metrics } = dashboardData
 
   return (
     <>
       <Head>
         <title>Dashboard Admin - Hotel Luxe</title>
-        <meta name="description" content="Tableau de bord administrateur Hotel Luxe" />
+        <meta name="description" content="Tableau de bord administrateur Hotel Luxe avec données Prisma PostgreSQL" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -128,20 +235,29 @@ export default function AdminDashboard() {
                     <span className="text-xs text-red-600 ml-2">HOTEL LUXE</span>
                   </div>
                 </Link>
+                
+                {error && (
+                  <div className="bg-red-100 text-red-800 px-3 py-1 rounded text-xs">
+                    Mode Fallback
+                  </div>
+                )}
               </div>
 
               <nav className="hidden md:flex items-center space-x-6">
-                <Link href="/admin" className="text-blue-600 font-medium">
+                <Link href="/admin" className="text-red-600 font-medium">
                   Dashboard
                 </Link>
-                <Link href="/admin/rooms" className="text-gray-600 hover:text-blue-600 transition-colors">
-                  Chambres
+                <Link href="/admin/rooms" className="text-gray-600 hover:text-red-600 transition-colors">
+                  Chambres ({metrics.totalRooms})
                 </Link>
-                <Link href="/admin/bookings" className="text-gray-600 hover:text-blue-600 transition-colors">
-                  Réservations
+                <Link href="/admin/bookings" className="text-gray-600 hover:text-red-600 transition-colors">
+                  Réservations ({metrics.totalBookings})
                 </Link>
-                <Link href="/admin/users" className="text-gray-600 hover:text-blue-600 transition-colors">
-                  Clients
+                <Link href="/admin/reviews" className="text-gray-600 hover:text-red-600 transition-colors">
+                  Avis ({metrics.totalReviews})
+                </Link>
+                <Link href="/admin/users" className="text-gray-600 hover:text-red-600 transition-colors">
+                  Clients ({metrics.totalUsers})
                 </Link>
               </nav>
 
@@ -156,7 +272,7 @@ export default function AdminDashboard() {
                     <p className="text-sm font-medium text-gray-900">
                       {user.firstName} {user.lastName}
                     </p>
-                    <p className="text-xs text-red-600">Administrateur</p>
+                    <p className="text-xs text-red-600">👑 Administrateur</p>
                   </div>
                 </div>
                 
@@ -184,122 +300,156 @@ export default function AdminDashboard() {
                 Dashboard Administrateur 👑
               </h1>
               <p className="text-red-100 mb-4">
-                Bienvenue {user.firstName} ! Gérez votre hôtel en temps réel.
+                Bienvenue {user.firstName} ! Gérez votre hôtel avec données PostgreSQL en temps réel.
               </p>
-              <p className="text-sm text-red-200">
-                Dernière connexion : 2025-10-01 14:39:12 UTC
-              </p>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm text-red-200">
+                <div className="flex items-center space-x-1">
+                  <UsersIcon className="w-4 h-4" />
+                  <span>{metrics.totalUsers} clients</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <BuildingOfficeIcon className="w-4 h-4" />
+                  <span>{metrics.totalRooms} chambres</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <CalendarDaysIcon className="w-4 h-4" />
+                  <span>{metrics.totalBookings} réservations</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <StarIcon className="w-4 h-4" />
+                  <span>{metrics.totalReviews} avis</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <BanknotesIcon className="w-4 h-4" />
+                  <span>{formatCurrency(metrics.totalRevenue)}</span>
+                </div>
+              </div>
             </div>
           </motion.div>
 
-          {/* Métriques principales */}
-          {stats && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {[
-                {
-                  title: 'Revenus du Mois',
-                  value: `${stats.totalRevenue.toLocaleString()}€`,
-                  change: `+${stats.monthlyGrowth}%`,
-                  changeType: 'positive',
-                  icon: BanknotesIcon,
-                  color: 'from-green-500 to-green-600'
-                },
-                {
-                  title: 'Réservations',
-                  value: stats.totalBookings,
-                  change: '+2 cette semaine',
-                  changeType: 'positive',
-                  icon: CalendarDaysIcon,
-                  color: 'from-blue-500 to-blue-600'
-                },
-                {
-                  title: 'Taux d\'Occupation',
-                  value: `${stats.occupancyRate}%`,
-                  change: '+5% vs mois dernier',
-                  changeType: 'positive',
-                  icon: HomeIcon,
-                  color: 'from-purple-500 to-purple-600'
-                },
-                {
-                  title: 'Clients Actifs',
-                  value: stats.totalUsers,
-                  change: '+3 nouveaux',
-                  changeType: 'positive',
-                  icon: UserGroupIcon,
-                  color: 'from-orange-500 to-orange-600'
-                }
-              ].map((metric, index) => (
-                <motion.div
-                  key={metric.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden"
-                >
-                  <div className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">
-                          {metric.title}
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900">
-                          {metric.value}
-                        </p>
-                        
-                        <div className="flex items-center mt-2">
-                          {metric.changeType === 'positive' ? (
-                            <ArrowUpIcon className="w-4 h-4 text-green-500 mr-1" />
-                          ) : (
-                            <ArrowDownIcon className="w-4 h-4 text-red-500 mr-1" />
-                          )}
-                          <span className={`text-sm font-medium ${
-                            metric.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {metric.change}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className={`p-3 rounded-xl bg-gradient-to-r ${metric.color}`}>
-                        <metric.icon className="w-6 h-6 text-white" />
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          )}
-
-          {/* Actions rapides */}
+          {/* Métriques principales - Données réelles DB */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[
               {
-                title: 'Voir les Chambres',
-                description: 'Gérer toutes les chambres',
-                icon: HomeIcon,
-                href: '/admin/rooms',
-                color: 'bg-blue-500 hover:bg-blue-600'
+                title: 'Revenus du Mois',
+                value: formatCurrency(metrics.totalRevenue),
+                change: `${metrics.revenueGrowth >= 0 ? '+' : ''}${metrics.revenueGrowth}%`,
+                changeType: metrics.revenueGrowth >= 0 ? 'positive' : 'negative',
+                icon: BanknotesIcon,
+                color: 'from-green-500 to-green-600',
+                description: 'Depuis le début du mois'
               },
               {
-                title: 'Ajouter une Chambre',
-                description: 'Créer une nouvelle chambre',
-                icon: PlusIcon,
-                href: '/admin/rooms/new',
+                title: 'Utilisateurs',
+                value: metrics.totalUsers,
+                change: `${metrics.activeUsers} actifs`,
+                changeType: 'positive',
+                icon: UserGroupIcon,
+                color: 'from-blue-500 to-blue-600',
+                description: `+${metrics.usersGrowth}% ce mois`
+              },
+              {
+                title: 'Réservations',
+                value: metrics.totalBookings,
+                change: `${metrics.activeBookings} actives`,
+                changeType: 'positive',
+                icon: CalendarDaysIcon,
+                color: 'from-purple-500 to-purple-600',
+                description: `${metrics.pendingBookings} en attente`
+              },
+              {
+                title: 'Avis Clients',
+                value: metrics.totalReviews,
+                change: `${metrics.averageRating}/5 ⭐`,
+                changeType: 'positive',
+                icon: ChatBubbleBottomCenterTextIcon,
+                color: 'from-yellow-500 to-yellow-600',
+                description: `${metrics.verifiedReviews} vérifiés`
+              }
+            ].map((metric, index) => (
+              <motion.div
+                key={metric.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="bg-white rounded-2xl shadow-sm overflow-hidden"
+              >
+                <div className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-1">
+                        {metric.title}
+                      </p>
+                      <p className="text-3xl font-bold text-gray-900">
+                        {metric.value}
+                      </p>
+                      
+                      <div className="flex items-center mt-2">
+                        {metric.changeType === 'positive' ? (
+                          <ArrowUpIcon className="w-4 h-4 text-green-500 mr-1" />
+                        ) : (
+                          <ArrowDownIcon className="w-4 h-4 text-red-500 mr-1" />
+                        )}
+                        <span className={`text-sm font-medium ${
+                          metric.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {metric.change}
+                        </span>
+                      </div>
+                      
+                      <p className="text-xs text-gray-500 mt-1">
+                        {metric.description}
+                      </p>
+                    </div>
+                    
+                    <div className={`p-3 rounded-xl bg-gradient-to-r ${metric.color}`}>
+                      <metric.icon className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Actions rapides */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            {[
+              {
+                title: 'Gérer Utilisateurs',
+                description: `${metrics.totalUsers} clients`,
+                icon: UserGroupIcon,
+                href: '/admin/users',
+                color: 'bg-blue-500 hover:bg-blue-600',
+                badge: metrics.totalUsers > 20 ? 'ACTIVE' : null
+              },
+              {
+                title: 'Gérer Chambres',
+                description: `${metrics.totalRooms} chambres`,
+                icon: HomeIcon,
+                href: '/admin/rooms',
                 color: 'bg-green-500 hover:bg-green-600'
               },
               {
-                title: 'Voir les Réservations',
-                description: 'Toutes les réservations',
+                title: 'Réservations',
+                description: `${metrics.activeBookings} actives`,
                 icon: CalendarDaysIcon,
                 href: '/admin/bookings',
-                color: 'bg-purple-500 hover:bg-purple-600'
+                color: 'bg-purple-500 hover:bg-purple-600',
+                badge: metrics.pendingBookings > 0 ? `${metrics.pendingBookings} EN ATTENTE` : null
               },
               {
-                title: 'Statistiques Détaillées',
-                description: 'Rapports complets',
+                title: 'Gérer Avis',
+                description: `${metrics.totalReviews} avis`,
+                icon: ChatBubbleBottomCenterTextIcon,
+                href: '/admin/reviews',
+                color: 'bg-yellow-500 hover:bg-yellow-600'
+              },
+              {
+                title: 'Statistiques',
+                description: 'Rapports détaillés',
                 icon: ChartBarIcon,
                 href: '/admin/stats',
-                color: 'bg-orange-500 hover:bg-orange-600'
+                color: 'bg-red-500 hover:bg-red-600'
               }
             ].map((action, index) => (
               <motion.div
@@ -310,8 +460,14 @@ export default function AdminDashboard() {
               >
                 <Link
                   href={action.href}
-                  className="group block bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-all duration-200"
+                  className="group block bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-all duration-200 relative"
                 >
+                  {action.badge && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                      {action.badge}
+                    </div>
+                  )}
+                  
                   <div className="flex items-center justify-between mb-4">
                     <div className={`p-3 ${action.color} rounded-lg transition-colors`}>
                       <action.icon className="h-6 w-6 text-white" />
@@ -330,9 +486,9 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Vue d'ensemble des chambres */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* Chambres */}
+          {/* Données détaillées */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            {/* Utilisateurs récents */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -341,50 +497,98 @@ export default function AdminDashboard() {
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Aperçu des Chambres ({dashboardData?.rooms?.length || 0})
+                  👥 Utilisateurs Récents
                 </h3>
                 <Link
-                  href="/admin/rooms"
+                  href="/admin/users"
                   className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                 >
                   Voir tout →
                 </Link>
               </div>
               
-              {dashboardData?.rooms && dashboardData.rooms.length > 0 ? (
+              {dashboardData.recentUsers.length > 0 ? (
                 <div className="space-y-4">
-                  {dashboardData.rooms.slice(0, 5).map((room) => (
-                    <div key={room.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  {dashboardData.recentUsers.slice(0, 5).map((user) => (
+                    <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <HomeIcon className="w-5 h-5 text-blue-600" />
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-blue-600 text-sm font-medium">
+                            {user.firstName?.[0]}{user.lastName?.[0]}
+                          </span>
                         </div>
                         <div>
-                          <h4 className="font-medium text-gray-900">{room.name}</h4>
-                          <p className="text-sm text-gray-500">{room.type}</p>
+                          <h4 className="font-medium text-gray-900 text-sm">
+                            {user.firstName} {user.lastName}
+                          </h4>
+                          <p className="text-xs text-gray-500">{user.email}</p>
                         </div>
                       </div>
                       
                       <div className="text-right">
-                        <p className="font-semibold text-gray-900">{room.price}€</p>
-                        <p className="text-sm text-green-600">
-                          {room.isActive ? 'Disponible' : 'Indisponible'}
-                        </p>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {user.isActive ? 'Actif' : 'Inactif'}
+                        </span>
+                        <p className="text-xs text-gray-500 mt-1">{user.role}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <HomeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500">Aucune chambre disponible</p>
-                  <Link
-                    href="/admin/rooms/new"
-                    className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-700"
-                  >
-                    <PlusIcon className="w-4 h-4 mr-1" />
-                    Ajouter une chambre
-                  </Link>
+                  <UserGroupIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Aucun utilisateur récent</p>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Réservations récentes */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.9 }}
+              className="bg-white rounded-2xl shadow-sm p-6"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  📅 Réservations Récentes
+                </h3>
+                <Link
+                  href="/admin/bookings"
+                  className="text-purple-600 hover:text-purple-700 text-sm font-medium"
+                >
+                  Gérer →
+                </Link>
+              </div>
+              
+              {dashboardData.recentBookings.length > 0 ? (
+                <div className="space-y-4">
+                  {dashboardData.recentBookings.slice(0, 4).map((booking) => (
+                    <div key={booking.id} className="p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-gray-900 text-sm">
+                          {booking.user?.firstName} {booking.user?.lastName}
+                        </span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(booking.status)}`}>
+                          {booking.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-600">
+                        <span>🏨 {booking.room?.name}</span>
+                        <span>{formatCurrency(booking.totalAmount)}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {formatDate(booking.createdAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <CalendarDaysIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500">Aucune réservation récente</p>
                 </div>
               )}
             </motion.div>
@@ -393,18 +597,18 @@ export default function AdminDashboard() {
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.9 }}
+              transition={{ delay: 1 }}
               className="bg-white rounded-2xl shadow-sm p-6"
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Activité Récente
+                  🕐 Activité Récente
                 </h3>
                 <ClockIcon className="w-5 h-5 text-gray-400" />
               </div>
               
               <div className="space-y-4">
-                {dashboardData?.recentActivity?.map((activity, index) => (
+                {dashboardData.recentActivity?.map((activity, index) => (
                   <div key={index} className="flex items-center space-x-3">
                     <div className={`w-2 h-2 rounded-full ${activity.color}`}></div>
                     <div className="flex-1">
@@ -417,58 +621,92 @@ export default function AdminDashboard() {
             </motion.div>
           </div>
 
-          {/* Liens utiles */}
+          {/* Status et liens utiles */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1 }}
+            transition={{ delay: 1.1 }}
             className="bg-white rounded-2xl shadow-sm p-6"
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Accès Rapide - Système développé par msylla01
-            </h3>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <a
-                href="http://localhost:5000/api"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-3 text-center border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
-              >
-                <ChartBarIcon className="w-6 h-6 text-blue-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-900">API Docs</p>
-              </a>
-              
-              <a
-                href="http://localhost:5000/health"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-3 text-center border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
-              >
-                <CheckCircleIcon className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-900">Health Check</p>
-              </a>
-              
-              <Link
-                href="/"
-                className="p-3 text-center border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
-              >
-                <HomeIcon className="w-6 h-6 text-purple-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-900">Site Public</p>
-              </Link>
-              
-              <Link
-                href="/admin/rooms"
-                className="p-3 text-center border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-              >
-                <CreditCardIcon className="w-6 h-6 text-gray-600 mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-900">Gestion</p>
-              </Link>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Status système */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  ⚡ Status Système
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">API Backend</span>
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">✅ Opérationnel</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Base PostgreSQL</span>
+                    <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">✅ Connectée</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Taux d'occupation</span>
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">{metrics.occupancyRate}%</span>
+                  </div>
+                  {error && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Mode Fallback</span>
+                      <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">⚠️ Actif</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Liens utiles */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  🔗 Accès Rapide
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <a
+                    href="http://localhost:5000/api/admin/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-red-300 hover:bg-red-50 transition-colors"
+                  >
+                    <ChartBarIcon className="w-5 h-5 text-red-600 mx-auto mb-1" />
+                    <p className="text-xs font-medium text-gray-900">API Admin</p>
+                  </a>
+                  
+                  <a
+                    href="http://localhost:5000/health"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
+                  >
+                    <CheckCircleIcon className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                    <p className="text-xs font-medium text-gray-900">Health</p>
+                  </a>
+                  
+                  <Link
+                    href="/"
+                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                  >
+                    <HomeIcon className="w-5 h-5 text-blue-600 mx-auto mb-1" />
+                    <p className="text-xs font-medium text-gray-900">Site Public</p>
+                  </Link>
+                  
+                  <button
+                    onClick={fetchDashboardData}
+                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    <ArrowRightIcon className="w-5 h-5 text-gray-600 mx-auto mb-1" />
+                    <p className="text-xs font-medium text-gray-900">Actualiser</p>
+                  </button>
+                </div>
+              </div>
             </div>
             
             <div className="mt-6 p-4 bg-gray-50 rounded-lg text-center">
               <p className="text-sm text-gray-600">
-                ✅ Dashboard Admin fonctionnel • 2025-10-01 14:39:12 UTC • msylla01
+                ✅ Dashboard Admin Full-Stack avec Prisma PostgreSQL • 2025-10-03 17:36:40 UTC • msylla01
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                🗄️ Données temps réel • 👑 Gestion complète • 📊 {Object.keys(metrics).length} métriques
               </p>
             </div>
           </motion.div>

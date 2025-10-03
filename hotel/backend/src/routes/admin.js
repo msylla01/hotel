@@ -1,413 +1,51 @@
 const express = require('express');
-const Joi = require('joi');
 const { PrismaClient } = require('@prisma/client');
-const { requireAdmin } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Toutes les routes admin nécessitent un accès admin
-router.use(requireAdmin);
+console.log('👑 Chargement routes admin [msylla01] - 2025-10-03 17:36:40');
 
-// Schema de validation pour créer/modifier une chambre
-const roomSchema = Joi.object({
-  name: Joi.string().min(2).max(100).required(),
-  type: Joi.string().valid('SINGLE', 'DOUBLE', 'SUITE', 'FAMILY', 'DELUXE').required(),
-  price: Joi.number().positive().required(),
-  description: Joi.string().max(1000).optional(),
-  capacity: Joi.number().integer().min(1).max(10).required(),
-  size: Joi.number().positive().optional(),
-  amenities: Joi.array().items(Joi.string()).optional(),
-  images: Joi.array().items(Joi.string()).optional()
-});
-
-// GET /api/admin/dashboard - Dashboard administrateur
-router.get('/dashboard', async (req, res) => {
+// Middleware pour vérifier les droits admin
+const adminAuth = async (req, res, next) => {
   try {
+    // Utiliser le middleware d'auth existant
+    await authenticateToken(req, res, () => {
+      if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({
+          success: false,
+          message: 'Droits administrateur requis'
+        });
+      }
+      next();
+    });
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentification admin échouée'
+    });
+  }
+};
+
+// GET /api/admin/dashboard - Données complètes du dashboard
+router.get('/dashboard', adminAuth, async (req, res) => {
+  try {
+    console.log('📊 Récupération données dashboard admin [msylla01] - 2025-10-03 17:36:40');
+
+    // Récupérer toutes les données en parallèle
     const [
-      totalUsers,
-      totalRooms,
-      totalBookings,
-      totalRevenue,
-      recentBookings
+      users,
+      rooms,
+      bookings,
+      reviews,
+      usersStats,
+      bookingsStats,
+      reviewsStats,
+      paymentsStats
     ] = await Promise.all([
-      prisma.user.count(),
-      prisma.room.count(),
-      prisma.booking.count(),
-      prisma.booking.aggregate({
-        where: { status: { in: ['CONFIRMED', 'CHECKED_OUT'] } },
-        _sum: { totalAmount: true }
-      }),
-      prisma.booking.findMany({
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          user: { select: { firstName: true, lastName: true, email: true } },
-          room: { select: { name: true, type: true } }
-        }
-      })
-    ]);
-
-    const stats = {
-      totalUsers,
-      totalRooms,
-      totalBookings,
-      totalRevenue: totalRevenue._sum.totalAmount || 0,
-      recentBookings,
-      occupancyRate: Math.floor(Math.random() * 30) + 70, // Simulation
-      monthlyGrowth: Math.floor(Math.random() * 20) + 5 // Simulation
-    };
-
-    res.json({
-      success: true,
-      message: 'Dashboard data retrieved successfully',
-      data: stats,
-      timestamp: new Date().toISOString(),
-      admin: req.user,
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur dashboard admin [msylla01]:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des données du dashboard',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// GET /api/admin/rooms - Gérer toutes les chambres (incluant inactives)
-router.get('/rooms', async (req, res) => {
-  try {
-    const { 
-      type, 
-      status,
-      page = 1,
-      limit = 20,
-      sortBy = 'createdAt',
-      sortOrder = 'desc'
-    } = req.query;
-    
-    let where = {};
-    
-    // Filtres
-    if (type) where.type = type;
-    if (status === 'active') where.isActive = true;
-    if (status === 'inactive') where.isActive = false;
-
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const take = parseInt(limit);
-
-    // Tri
-    const orderBy = {};
-    orderBy[sortBy] = sortOrder;
-
-    const [rooms, totalCount] = await Promise.all([
-      prisma.room.findMany({
-        where,
-        include: {
-          reviews: {
-            select: { rating: true },
-            where: { isApproved: true }
-          },
-          _count: {
-            select: { 
-              bookings: true,
-              reviews: true
-            }
-          }
-        },
-        orderBy,
-        skip,
-        take
-      }),
-      prisma.room.count({ where })
-    ]);
-
-    // Calculer les statistiques pour chaque chambre
-    const roomsWithStats = rooms.map(room => {
-      const averageRating = room.reviews.length > 0 
-        ? room.reviews.reduce((sum, review) => sum + review.rating, 0) / room.reviews.length
-        : 0;
-
-      return {
-        ...room,
-        averageRating: Math.round(averageRating * 10) / 10,
-        totalReviews: room.reviews.length,
-        totalBookings: room._count.bookings,
-        reviews: undefined,
-        _count: undefined
-      };
-    });
-
-    const totalPages = Math.ceil(totalCount / take);
-
-    res.json({
-      success: true,
-      rooms: roomsWithStats,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalCount,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-        limit: take
-      },
-      filters: { type, status },
-      timestamp: new Date().toISOString(),
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur liste chambres admin [msylla01]:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Erreur lors de la récupération des chambres',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// POST /api/admin/rooms - Créer une nouvelle chambre
-router.post('/rooms', async (req, res) => {
-  try {
-    const { error } = roomSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ 
-        success: false,
-        message: error.details[0].message,
-        field: error.details[0].path[0],
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    const roomData = {
-      ...req.body,
-      price: parseFloat(req.body.price),
-      capacity: parseInt(req.body.capacity),
-      size: req.body.size ? parseFloat(req.body.size) : null,
-      amenities: req.body.amenities || [],
-      images: req.body.images || []
-    };
-
-    const room = await prisma.room.create({
-      data: roomData,
-      include: {
-        _count: {
-          select: { bookings: true, reviews: true }
-        }
-      }
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Chambre créée avec succès',
-      room: {
-        ...room,
-        averageRating: 0,
-        totalReviews: 0,
-        totalBookings: room._count.bookings
-      },
-      timestamp: new Date().toISOString(),
-      admin: req.user,
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur création chambre admin [msylla01]:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Erreur lors de la création de la chambre',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// PUT /api/admin/rooms/:id - Modifier une chambre
-router.put('/rooms/:id', async (req, res) => {
-  try {
-    const { error } = roomSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ 
-        success: false,
-        message: error.details[0].message,
-        field: error.details[0].path[0],
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    const existingRoom = await prisma.room.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!existingRoom) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Chambre non trouvée',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    const updateData = {
-      ...req.body,
-      price: parseFloat(req.body.price),
-      capacity: parseInt(req.body.capacity),
-      size: req.body.size ? parseFloat(req.body.size) : null,
-      amenities: req.body.amenities || [],
-      images: req.body.images || []
-    };
-
-    const room = await prisma.room.update({
-      where: { id: req.params.id },
-      data: updateData,
-      include: {
-        reviews: {
-          select: { rating: true },
-          where: { isApproved: true }
-        },
-        _count: {
-          select: { bookings: true, reviews: true }
-        }
-      }
-    });
-
-    const averageRating = room.reviews.length > 0 
-      ? room.reviews.reduce((sum, review) => sum + review.rating, 0) / room.reviews.length
-      : 0;
-
-    res.json({
-      success: true,
-      message: 'Chambre modifiée avec succès',
-      room: {
-        ...room,
-        averageRating: Math.round(averageRating * 10) / 10,
-        totalReviews: room.reviews.length,
-        totalBookings: room._count.bookings,
-        reviews: undefined,
-        _count: undefined
-      },
-      timestamp: new Date().toISOString(),
-      admin: req.user,
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur modification chambre admin [msylla01]:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Erreur lors de la modification de la chambre',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// DELETE /api/admin/rooms/:id - Supprimer une chambre (soft delete)
-router.delete('/rooms/:id', async (req, res) => {
-  try {
-    const existingRoom = await prisma.room.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!existingRoom) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Chambre non trouvée',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Soft delete - marquer comme inactive
-    const room = await prisma.room.update({
-      where: { id: req.params.id },
-      data: { isActive: false }
-    });
-
-    res.json({
-      success: true,
-      message: 'Chambre supprimée avec succès',
-      room,
-      timestamp: new Date().toISOString(),
-      admin: req.user,
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur suppression chambre admin [msylla01]:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Erreur lors de la suppression de la chambre',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// PATCH /api/admin/rooms/:id/toggle - Activer/Désactiver une chambre
-router.patch('/rooms/:id/toggle', async (req, res) => {
-  try {
-    const room = await prisma.room.findUnique({
-      where: { id: req.params.id }
-    });
-
-    if (!room) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Chambre non trouvée',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    const updatedRoom = await prisma.room.update({
-      where: { id: req.params.id },
-      data: { isActive: !room.isActive }
-    });
-
-    res.json({
-      success: true,
-      message: `Chambre ${updatedRoom.isActive ? 'activée' : 'désactivée'} avec succès`,
-      room: updatedRoom,
-      timestamp: new Date().toISOString(),
-      admin: req.user,
-      developer: 'msylla01'
-    });
-  } catch (error) {
-    console.error('Erreur toggle chambre admin [msylla01]:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Erreur lors de la modification du statut de la chambre',
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// GET /api/admin/users - Gérer les utilisateurs
-router.get('/users', async (req, res) => {
-  try {
-    const { 
-      role,
-      status,
-      page = 1,
-      limit = 20,
-      search
-    } = req.query;
-    
-    let where = {};
-    
-    // Filtres
-    if (role) where.role = role;
-    if (status === 'active') where.isActive = true;
-    if (status === 'inactive') where.isActive = false;
-    if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } }
-      ];
-    }
-
-    // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const take = parseInt(limit);
-
-    const [users, totalCount] = await Promise.all([
+      // Utilisateurs
       prisma.user.findMany({
-        where,
         select: {
           id: true,
           firstName: true,
@@ -415,48 +53,493 @@ router.get('/users', async (req, res) => {
           email: true,
           role: true,
           isActive: true,
-          createdAt: true,
-          phone: true,
-          _count: {
+          createdAt: true
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Chambres avec relations
+      prisma.room.findMany({
+        include: {
+          bookings: {
             select: {
-              bookings: true,
-              reviews: true
+              id: true,
+              status: true,
+              totalAmount: true,
+              createdAt: true
+            }
+          },
+          reviews: {
+            select: {
+              id: true,
+              rating: true,
+              verified: true,
+              createdAt: true
             }
           }
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take
+        orderBy: { createdAt: 'desc' }
       }),
-      prisma.user.count({ where })
+
+      // Réservations avec relations
+      prisma.booking.findMany({
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true
+            }
+          },
+          room: {
+            select: {
+              name: true,
+              type: true,
+              price: true
+            }
+          },
+          payment: {
+            select: {
+              status: true,
+              amount: true,
+              method: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Avis avec relations
+      prisma.review.findMany({
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true
+            }
+          },
+          room: {
+            select: {
+              name: true,
+              type: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Stats utilisateurs
+      prisma.user.groupBy({
+        by: ['role', 'isActive'],
+        _count: true
+      }),
+
+      // Stats réservations
+      prisma.booking.groupBy({
+        by: ['status'],
+        _count: true,
+        _sum: {
+          totalAmount: true
+        }
+      }),
+
+      // Stats avis
+      prisma.review.aggregate({
+        _count: true,
+        _avg: {
+          rating: true
+        }
+      }),
+
+      // Stats paiements (si existe)
+      prisma.payment.groupBy({
+        by: ['status'],
+        _count: true,
+        _sum: {
+          amount: true
+        }
+      }).catch(() => [])
     ]);
 
-    const totalPages = Math.ceil(totalCount / take);
+    // Calculer les métriques avancées
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Revenus ce mois
+    const thisMonthBookings = bookings.filter(b => 
+      new Date(b.createdAt) >= thisMonth && 
+      ['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(b.status)
+    );
+    const thisMonthRevenue = thisMonthBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+
+    // Revenus mois dernier
+    const lastMonthBookings = bookings.filter(b => 
+      new Date(b.createdAt) >= lastMonth && 
+      new Date(b.createdAt) < thisMonth &&
+      ['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(b.status)
+    );
+    const lastMonthRevenue = lastMonthBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+
+    // Croissance
+    const revenueGrowth = lastMonthRevenue > 0 
+      ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+      : 100;
+
+    // Nouveaux utilisateurs ce mois
+    const newUsersThisMonth = users.filter(u => new Date(u.createdAt) >= thisMonth).length;
+    const newUsersLastMonth = users.filter(u => 
+      new Date(u.createdAt) >= lastMonth && new Date(u.createdAt) < thisMonth
+    ).length;
+    const usersGrowth = newUsersLastMonth > 0 
+      ? Math.round(((newUsersThisMonth - newUsersLastMonth) / newUsersLastMonth) * 100)
+      : 100;
+
+    // Taux d'occupation
+    const totalRoomNights = rooms.length * 30; // Approximation
+    const bookedNights = bookings.filter(b => 
+      ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(b.status)
+    ).length * 2; // Approximation
+    const occupancyRate = Math.round((bookedNights / totalRoomNights) * 100);
+
+    // Préparer les données de réponse
+    const dashboardData = {
+      // Métriques principales
+      metrics: {
+        totalRevenue: thisMonthRevenue,
+        revenueGrowth: revenueGrowth,
+        totalUsers: users.length,
+        activeUsers: users.filter(u => u.isActive).length,
+        usersGrowth: usersGrowth,
+        totalBookings: bookings.length,
+        activeBookings: bookings.filter(b => ['CONFIRMED', 'CHECKED_IN'].includes(b.status)).length,
+        pendingBookings: bookings.filter(b => b.status === 'PENDING').length,
+        totalRooms: rooms.length,
+        activeRooms: rooms.filter(r => r.isActive).length,
+        occupancyRate: occupancyRate,
+        totalReviews: reviews.length,
+        averageRating: reviewsStats._avg.rating ? Number(reviewsStats._avg.rating).toFixed(1) : '0.0',
+        verifiedReviews: reviews.filter(r => r.verified).length
+      },
+
+      // Données détaillées
+      recentUsers: users.slice(0, 10),
+      recentBookings: bookings.slice(0, 10),
+      recentReviews: reviews.slice(0, 10),
+      
+      // Chambres avec stats calculées
+      roomsWithStats: rooms.map(room => ({
+        ...room,
+        totalBookings: room.bookings.length,
+        totalRevenue: room.bookings.reduce((sum, b) => sum + Number(b.totalAmount), 0),
+        averageRating: room.reviews.length > 0 
+          ? (room.reviews.reduce((sum, r) => sum + r.rating, 0) / room.reviews.length).toFixed(1)
+          : '0.0',
+        totalReviews: room.reviews.length,
+        verifiedReviews: room.reviews.filter(r => r.verified).length
+      })),
+
+      // Statistiques par catégorie
+      stats: {
+        users: usersStats,
+        bookings: bookingsStats,
+        reviews: {
+          total: reviewsStats._count,
+          average: reviewsStats._avg.rating,
+          distribution: await prisma.review.groupBy({
+            by: ['rating'],
+            _count: true,
+            orderBy: { rating: 'desc' }
+          })
+        },
+        payments: paymentsStats
+      },
+
+      // Activité récente (chronologique)
+      recentActivity: [
+        ...reviews.slice(0, 3).map(r => ({
+          type: 'review',
+          message: `Nouvel avis ${r.rating} étoiles de ${r.user.firstName} ${r.user.lastName}`,
+          time: getTimeAgo(r.createdAt),
+          color: 'bg-yellow-500',
+          data: r
+        })),
+        ...bookings.slice(0, 3).map(b => ({
+          type: 'booking',
+          message: `Nouvelle réservation ${b.room.name} par ${b.user.firstName} ${b.user.lastName}`,
+          time: getTimeAgo(b.createdAt),
+          color: 'bg-blue-500',
+          data: b
+        })),
+        ...users.slice(0, 2).map(u => ({
+          type: 'user',
+          message: `Nouvel utilisateur: ${u.firstName} ${u.lastName}`,
+          time: getTimeAgo(u.createdAt),
+          color: 'bg-green-500',
+          data: u
+        }))
+      ].sort((a, b) => new Date(b.data.createdAt) - new Date(a.data.createdAt)).slice(0, 8)
+    };
+
+    console.log(`✅ Dashboard admin chargé: ${users.length} users, ${rooms.length} rooms, ${bookings.length} bookings, ${reviews.length} reviews [msylla01]`);
 
     res.json({
       success: true,
-      users,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalCount,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-        limit: take
-      },
-      filters: { role, status, search },
+      data: dashboardData,
       timestamp: new Date().toISOString(),
-      admin: req.user,
       developer: 'msylla01'
     });
+
   } catch (error) {
-    console.error('Erreur liste utilisateurs admin [msylla01]:', error);
-    res.status(500).json({ 
+    console.error('❌ Erreur dashboard admin [msylla01]:', error);
+    res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération des utilisateurs',
+      message: 'Erreur lors de la récupération des données admin',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
 });
+
+// GET /api/admin/users - Gestion utilisateurs
+router.get('/users', adminAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, role, isActive } = req.query;
+    
+    const where = {};
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+    if (role) where.role = role;
+    if (isActive !== undefined) where.isActive = isActive === 'true';
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: {
+          bookings: {
+            select: {
+              id: true,
+              status: true,
+              totalAmount: true
+            }
+          },
+          reviews: {
+            select: {
+              id: true,
+              rating: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit),
+        skip: (parseInt(page) - 1) * parseInt(limit)
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      users: users.map(user => ({
+        ...user,
+        totalBookings: user.bookings.length,
+        totalSpent: user.bookings.reduce((sum, b) => sum + Number(b.totalAmount), 0),
+        totalReviews: user.reviews.length,
+        averageRating: user.reviews.length > 0 
+          ? (user.reviews.reduce((sum, r) => sum + r.rating, 0) / user.reviews.length).toFixed(1)
+          : null
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur admin users [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des utilisateurs',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/admin/bookings - Gestion réservations
+router.get('/bookings', adminAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status, roomId } = req.query;
+    
+    const where = {};
+    if (status) where.status = status;
+    if (roomId) where.roomId = roomId;
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+              phone: true
+            }
+          },
+          room: {
+            select: {
+              name: true,
+              type: true,
+              price: true
+            }
+          },
+          payment: true
+        },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit),
+        skip: (parseInt(page) - 1) * parseInt(limit)
+      }),
+      prisma.booking.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      bookings,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur admin bookings [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des réservations',
+      error: error.message
+    });
+  }
+});
+
+// PUT /api/admin/bookings/:id/status - Modifier statut réservation
+router.put('/bookings/:id/status', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['PENDING', 'CONFIRMED', 'CANCELLED', 'CHECKED_IN', 'CHECKED_OUT', 'COMPLETED'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Statut invalide'
+      });
+    }
+
+    const booking = await prisma.booking.update({
+      where: { id },
+      data: { status },
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true
+          }
+        },
+        room: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    console.log(`✅ Statut réservation modifié [msylla01]: ${id} -> ${status}`);
+
+    res.json({
+      success: true,
+      message: 'Statut de réservation modifié avec succès',
+      booking,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur modification statut booking [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la modification du statut',
+      error: error.message
+    });
+  }
+});
+
+// PUT /api/admin/users/:id/status - Activer/désactiver utilisateur
+router.put('/users/:id/status', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'Le statut isActive doit être un booléen'
+      });
+    }
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { isActive },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        isActive: true
+      }
+    });
+
+    console.log(`✅ Statut utilisateur modifié [msylla01]: ${user.email} -> ${isActive ? 'actif' : 'inactif'}`);
+
+    res.json({
+      success: true,
+      message: `Utilisateur ${isActive ? 'activé' : 'désactivé'} avec succès`,
+      user,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur modification statut user [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la modification du statut utilisateur',
+      error: error.message
+    });
+  }
+});
+
+// Fonction utilitaire pour calculer le temps écoulé
+function getTimeAgo(date) {
+  const now = new Date();
+  const diffMs = now - new Date(date);
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 60) return `${diffMins} min`;
+  if (diffHours < 24) return `${diffHours}h`;
+  return `${diffDays}j`;
+}
+
+console.log('✅ Routes admin chargées [msylla01] - 2025-10-03 17:36:40');
 
 module.exports = router;
