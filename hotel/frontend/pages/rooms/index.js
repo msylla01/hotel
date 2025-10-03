@@ -24,6 +24,7 @@ import { StarIcon, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid
 export default function Rooms() {
   const router = useRouter()
   const [user, setUser] = useState(null)
+  const [isConnected, setIsConnected] = useState(false)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -37,29 +38,35 @@ export default function Rooms() {
   })
 
   useEffect(() => {
-    // Vérifier l'authentification
+    // Vérifier si l'utilisateur est connecté (SANS redirection forcée)
     const token = localStorage.getItem('hotel_token')
     const userData = localStorage.getItem('hotel_user')
     
-    if (!token || !userData) {
-      router.push('/auth/login')
-      return
+    if (token && userData) {
+      try {
+        const user = JSON.parse(userData)
+        setUser(user)
+        setIsConnected(true)
+        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 10:09:14:', user.firstName, user.lastName)
+        loadFavorites()
+      } catch (error) {
+        console.log('❌ Erreur parsing user data:', error)
+        setIsConnected(false)
+      }
+    } else {
+      setIsConnected(false)
+      console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 10:09:14')
     }
-
-    const user = JSON.parse(userData)
-    setUser(user)
-    console.log('👤 Utilisateur connecté [msylla01] - 2025-10-02 00:52:45:', user.firstName, user.lastName)
     
     fetchRoomsFromAPI()
-    loadFavorites()
-  }, [router])
+  }, [])
 
   const fetchRoomsFromAPI = async () => {
     try {
       setLoading(true)
       setError(null)
       
-      console.log('🏨 Récupération chambres API [msylla01] - 2025-10-02 00:52:45')
+      console.log('🏨 Récupération chambres API [msylla01] - 2025-10-03 10:09:14')
       
       const response = await fetch('http://localhost:5000/api/rooms')
       
@@ -86,6 +93,8 @@ export default function Rooms() {
   }
 
   const loadFavorites = () => {
+    if (!isConnected) return
+    
     const savedFavorites = localStorage.getItem('hotel_favorites')
     if (savedFavorites) {
       try {
@@ -106,14 +115,15 @@ export default function Rooms() {
   }
 
   const toggleFavorite = async (roomId) => {
-    try {
-      const token = localStorage.getItem('hotel_token')
-      
-      if (!token) {
-        alert('Veuillez vous connecter pour gérer les favoris')
-        return
+    if (!isConnected) {
+      const confirmLogin = window.confirm('Veuillez vous connecter pour gérer les favoris.\n\nSouhaitez-vous vous connecter maintenant ?')
+      if (confirmLogin) {
+        router.push('/auth/login')
       }
+      return
+    }
 
+    try {
       console.log('❤️ Toggle favori [msylla01]:', roomId)
 
       const isFavorite = favoriteRooms.includes(roomId)
@@ -178,7 +188,7 @@ export default function Rooms() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des chambres depuis la base de données...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 00:52:45</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 10:09:14</p>
         </div>
       </div>
     )
@@ -199,19 +209,15 @@ export default function Rooms() {
           </button>
           <div className="mt-4">
             <Link
-              href="/dashboard"
+              href={isConnected ? "/dashboard" : "/"}
               className="text-blue-600 hover:text-blue-700 text-sm"
             >
-              ← Retour au dashboard
+              ← Retour {isConnected ? 'au dashboard' : 'à l\'accueil'}
             </Link>
           </div>
         </div>
       </div>
     )
-  }
-
-  if (!user) {
-    return null
   }
 
   return (
@@ -227,11 +233,11 @@ export default function Rooms() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between py-6">
               <Link
-                href="/dashboard"
+                href={isConnected ? "/dashboard" : "/"}
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
               >
                 <ArrowLeftIcon className="w-5 h-5" />
-                <span>Retour au dashboard</span>
+                <span>Retour {isConnected ? 'au dashboard' : 'à l\'accueil'}</span>
               </Link>
               
               <div className="flex items-center space-x-2">
@@ -240,44 +246,84 @@ export default function Rooms() {
                 </div>
                 <span className="font-semibold text-gray-900">Hotel Luxe</span>
                 <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                  DB RÉELLE
+                  {rooms.length} chambres
                 </span>
               </div>
 
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    user.isActive ? 'bg-green-500' : 'bg-orange-500'
-                  }`}>
-                    <UserCircleIcon className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="text-sm">
-                    <div className="font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
+                {isConnected && user ? (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        user.isActive ? 'bg-green-500' : 'bg-orange-500'
+                      }`}>
+                        <UserCircleIcon className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-900">
+                          {user.firstName} {user.lastName}
+                        </div>
+                        <div className={`text-xs ${user.isActive ? 'text-green-600' : 'text-orange-600'}`}>
+                          {user.isActive ? '✅ Compte actif' : '⚠️ Compte désactivé'}
+                        </div>
+                      </div>
                     </div>
-                    <div className={`text-xs ${user.isActive ? 'text-green-600' : 'text-orange-600'}`}>
-                      {user.isActive ? '✅ Compte actif' : '⚠️ Compte désactivé'}
+                    
+                    <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
+                      ❤️ {favoriteRooms.length} favoris
                     </div>
+                    
+                    <Link
+                      href="/dashboard"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Mon Espace
+                    </Link>
+                  </>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <Link
+                      href="/auth/login"
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Se connecter
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      S'inscrire
+                    </Link>
                   </div>
-                </div>
-                
-                <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-full">
-                  ❤️ {favoriteRooms.length} favoris
-                </div>
-                
-                <Link
-                  href="/dashboard"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Mon Espace
-                </Link>
+                )}
               </div>
             </div>
           </div>
         </header>
 
+        {/* Message pour visiteurs non connectés */}
+        {!isConnected && (
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex">
+                <div className="ml-3">
+                  <p className="text-blue-700">
+                    👋 <strong>Bienvenue !</strong> Vous pouvez consulter toutes nos chambres. 
+                    <Link href="/auth/login" className="font-medium underline ml-1">
+                      Connectez-vous
+                    </Link> ou 
+                    <Link href="/auth/register" className="font-medium underline ml-1">
+                      créez un compte
+                    </Link> pour réserver et gérer vos favoris.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Alerte si compte désactivé */}
-        {!user.isActive && (
+        {isConnected && user && !user.isActive && (
           <div className="bg-orange-50 border-l-4 border-orange-400 p-4">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex">
@@ -304,19 +350,27 @@ export default function Rooms() {
             className="text-center mb-12"
           >
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              🏨 Nos Chambres - Données Réelles
+              🏨 Nos Chambres d'Exception
             </h1>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Toutes les chambres proviennent directement de notre base de données PostgreSQL. 
-              Aucune donnée simulée.
+              Découvrez notre collection de chambres premium. Données en temps réel depuis notre base PostgreSQL.
             </p>
-            {user && (
-              <p className="text-sm text-gray-500 mt-2">
-                Connecté : <strong>{user.firstName} {user.lastName}</strong>
-                • <span className="text-red-600">❤️ {favoriteRooms.length} favoris</span>
-                • <span className="text-green-600">🗄️ Données DB en temps réel</span>
-              </p>
-            )}
+            <div className="mt-4 flex items-center justify-center space-x-6 text-sm text-gray-500">
+              <div className="flex items-center space-x-1">
+                <span>🗄️</span>
+                <span>{rooms.length} chambres en base</span>
+              </div>
+              {isConnected && (
+                <div className="flex items-center space-x-1">
+                  <span>❤️</span>
+                  <span>{favoriteRooms.length} favoris</span>
+                </div>
+              )}
+              <div className="flex items-center space-x-1">
+                <span>👤</span>
+                <span>{isConnected ? `Connecté: ${user?.firstName}` : 'Visiteur'}</span>
+              </div>
+            </div>
           </motion.div>
 
           {/* Filtres */}
@@ -330,7 +384,7 @@ export default function Rooms() {
               <FunnelIcon className="w-5 h-5 text-gray-600" />
               <h2 className="text-lg font-semibold text-gray-900">Filtrer les chambres</h2>
               <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                {rooms.length} chambres en base
+                {rooms.length} chambres disponibles
               </span>
             </div>
 
@@ -340,7 +394,7 @@ export default function Rooms() {
                 <MagnifyingGlassIcon className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Rechercher..."
+                  placeholder="Rechercher une chambre..."
                   value={filters.search}
                   onChange={(e) => setFilters({...filters, search: e.target.value})}
                   className="pl-9 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -396,8 +450,8 @@ export default function Rooms() {
             {/* Résumé des filtres */}
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-gray-600">
-                {filteredRooms.length} chambre(s) affichée(s) sur {rooms.length} en base
-                {favoriteRooms.length > 0 && (
+                {filteredRooms.length} chambre(s) affichée(s) sur {rooms.length} disponibles
+                {isConnected && favoriteRooms.length > 0 && (
                   <span className="ml-2 text-red-600">• ❤️ {favoriteRooms.length} favoris</span>
                 )}
               </p>
@@ -443,7 +497,7 @@ export default function Rooms() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 + index * 0.1 }}
                   className={`bg-white rounded-2xl shadow-sm overflow-hidden hover:shadow-lg transition-all ${
-                    favoriteRooms.includes(room.id) ? 'ring-2 ring-red-200' : ''
+                    isConnected && favoriteRooms.includes(room.id) ? 'ring-2 ring-red-200' : ''
                   }`}
                 >
                   {/* Image */}
@@ -468,7 +522,7 @@ export default function Rooms() {
                           <span className="text-sm font-medium">{room.rating}</span>
                         </div>
                       )}
-                      {favoriteRooms.includes(room.id) && (
+                      {isConnected && favoriteRooms.includes(room.id) && (
                         <div className="bg-red-500 rounded-full p-1">
                           <HeartIconSolid className="w-4 h-4 text-white" />
                         </div>
@@ -482,7 +536,7 @@ export default function Rooms() {
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900 mb-1">
                           {room.name}
-                          {favoriteRooms.includes(room.id) && (
+                          {isConnected && favoriteRooms.includes(room.id) && (
                             <HeartIconSolid className="w-4 h-4 text-red-500 inline ml-2" />
                           )}
                         </h3>
@@ -509,7 +563,7 @@ export default function Rooms() {
                       {room.description}
                     </p>
 
-                    {/* Équipements */}
+                    {/* Équipements principaux */}
                     {room.amenities && room.amenities.length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-4">
                         {room.amenities.slice(0, 3).map((amenity, idx) => (
@@ -569,25 +623,39 @@ export default function Rooms() {
                         href={`/rooms/${room.id}`}
                         className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors text-center block"
                       >
-                        {user.isActive ? 'Voir les détails & Réserver' : 'Voir les détails'}
+                        {isConnected && user?.isActive 
+                          ? 'Voir détails & Réserver' 
+                          : isConnected 
+                            ? 'Voir les détails' 
+                            : 'Voir détails (Connexion pour réserver)'
+                        }
                       </Link>
+                      
+                      {/* Bouton favori conditionnel */}
                       <button
                         onClick={() => toggleFavorite(room.id)}
                         className={`w-full border py-2 rounded-lg transition-colors text-sm font-medium ${
-                          favoriteRooms.includes(room.id) 
+                          isConnected && favoriteRooms.includes(room.id) 
                             ? 'border-red-300 text-red-700 bg-red-50 hover:bg-red-100' 
                             : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                         }`}
                       >
-                        {favoriteRooms.includes(room.id) ? (
-                          <>
-                            <HeartIconSolid className="w-4 h-4 inline mr-1" />
-                            Retirer des favoris
-                          </>
+                        {isConnected ? (
+                          favoriteRooms.includes(room.id) ? (
+                            <>
+                              <HeartIconSolid className="w-4 h-4 inline mr-1" />
+                              Retirer des favoris
+                            </>
+                          ) : (
+                            <>
+                              <HeartIcon className="w-4 h-4 inline mr-1" />
+                              Ajouter aux favoris
+                            </>
+                          )
                         ) : (
                           <>
                             <HeartIcon className="w-4 h-4 inline mr-1" />
-                            Ajouter aux favoris
+                            Se connecter pour favoris
                           </>
                         )}
                       </button>
@@ -621,15 +689,73 @@ export default function Rooms() {
             </motion.div>
           )}
 
-          {/* Footer */}
+          {/* CTA selon statut connexion */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 }}
+            className="mt-12 text-center"
+          >
+            <div className="bg-white rounded-2xl shadow-sm p-8">
+              {isConnected ? (
+                <>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    🎯 Prêt à réserver votre séjour ?
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Vous avez trouvé la chambre parfaite ? Réservez-la dès maintenant !
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <Link
+                      href="/dashboard"
+                      className="w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                    >
+                      🏠 Mon Dashboard
+                    </Link>
+                    <Link
+                      href="/favorites"
+                      className="w-full sm:w-auto border border-blue-600 text-blue-600 px-8 py-3 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
+                    >
+                      ❤️ Mes Favoris ({favoriteRooms.length})
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-4">
+                    🔑 Connectez-vous pour réserver
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Créez votre compte Hotel Luxe pour réserver en ligne, gérer vos favoris et accéder à votre historique.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <Link
+                      href="/auth/register"
+                      className="w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                    >
+                      ✨ Créer mon compte
+                    </Link>
+                    <Link
+                      href="/auth/login"
+                      className="w-full sm:w-auto border border-blue-600 text-blue-600 px-8 py-3 rounded-lg hover:bg-blue-50 transition-colors font-semibold"
+                    >
+                      🔑 Se connecter
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Footer */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0 }}
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Chambres Hotel Luxe • Données réelles PostgreSQL • msylla01 • 2025-10-02 00:52:45 UTC
+              Chambres Hotel Luxe • Accessibles à tous • Données PostgreSQL • msylla01 • 2025-10-03 10:09:14 UTC
             </p>
           </motion.div>
         </main>

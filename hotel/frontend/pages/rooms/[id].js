@@ -19,14 +19,16 @@ import {
   MinusIcon,
   PlusIcon
 } from '@heroicons/react/24/outline'
-import { StarIcon } from '@heroicons/react/24/solid'
+import { StarIcon, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid'
 
 export default function RoomDetail() {
   const router = useRouter()
   const { id } = router.query
   const [user, setUser] = useState(null)
+  const [isConnected, setIsConnected] = useState(false)
   const [room, setRoom] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [favoriteRooms, setFavoriteRooms] = useState([])
   const [selectedImage, setSelectedImage] = useState(0)
   const [bookingData, setBookingData] = useState({
     checkIn: '',
@@ -38,28 +40,74 @@ export default function RoomDetail() {
   const [bookingError, setBookingError] = useState('')
 
   useEffect(() => {
-    // Vérifier l'authentification
+    // Vérifier si l'utilisateur est connecté (SANS redirection forcée)
     const token = localStorage.getItem('hotel_token')
     const userData = localStorage.getItem('hotel_user')
     
-    if (!token || !userData) {
-      router.push('/auth/login')
-      return
+    if (token && userData) {
+      try {
+        const user = JSON.parse(userData)
+        setUser(user)
+        setIsConnected(true)
+        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 10:21:08:', user.firstName, user.lastName)
+        loadFavorites()
+      } catch (error) {
+        console.log('❌ Erreur parsing user data:', error)
+        setIsConnected(false)
+      }
+    } else {
+      setIsConnected(false)
+      console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 10:21:08')
     }
-
-    const user = JSON.parse(userData)
-    setUser(user)
     
     if (id) {
       fetchRoomDetailFromAPI()
     }
-  }, [router, id])
+  }, [id])
+
+  const loadFavorites = () => {
+    if (!isConnected) return
+    
+    const savedFavorites = localStorage.getItem('hotel_favorites')
+    if (savedFavorites) {
+      try {
+        const favorites = JSON.parse(savedFavorites)
+        setFavoriteRooms(favorites)
+      } catch (error) {
+        setFavoriteRooms([])
+      }
+    }
+  }
+
+  const toggleFavorite = () => {
+    if (!isConnected) {
+      const confirmLogin = window.confirm('Veuillez vous connecter pour gérer les favoris.\n\nSouhaitez-vous vous connecter maintenant ?')
+      if (confirmLogin) {
+        router.push(`/auth/login?redirect=/rooms/${room.id}`)
+      }
+      return
+    }
+
+    const isFavorite = favoriteRooms.includes(room.id)
+    let newFavorites
+
+    if (isFavorite) {
+      newFavorites = favoriteRooms.filter(id => id !== room.id)
+      alert(`💔 "${room.name}" retiré des favoris`)
+    } else {
+      newFavorites = [...favoriteRooms, room.id]
+      alert(`❤️ "${room.name}" ajouté aux favoris`)
+    }
+
+    setFavoriteRooms(newFavorites)
+    localStorage.setItem('hotel_favorites', JSON.stringify(newFavorites))
+  }
 
   const fetchRoomDetailFromAPI = async () => {
     try {
       setLoading(true)
       
-      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-02 01:09:24:', id)
+      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-03 10:21:08:', id)
       
       const response = await fetch(`http://localhost:5000/api/rooms/${id}`)
       
@@ -227,12 +275,25 @@ export default function RoomDetail() {
   }
 
   const handleBooking = async () => {
-    if (!user.isActive) {
-      alert('⚠️ Veuillez réactiver votre compte pour effectuer une réservation')
-      router.push('/auth/reactivate')
+    // Vérifier si l'utilisateur est connecté
+    if (!isConnected) {
+      const confirmLogin = window.confirm(`Pour réserver "${room.name}", vous devez être connecté.\n\nSouhaitez-vous vous connecter maintenant ?`)
+      if (confirmLogin) {
+        router.push(`/auth/login?redirect=/rooms/${room.id}`)
+      }
       return
     }
 
+    // Vérifier si le compte est actif
+    if (!user.isActive) {
+      const confirmReactivate = window.confirm('Votre compte est désactivé. Vous devez le réactiver pour pouvoir réserver.\n\nSouhaitez-vous réactiver votre compte maintenant ?')
+      if (confirmReactivate) {
+        router.push('/auth/reactivate')
+      }
+      return
+    }
+
+    // Validation des données de réservation
     if (!bookingData.checkIn || !bookingData.checkOut) {
       setBookingError('Veuillez sélectionner vos dates de séjour')
       return
@@ -264,7 +325,7 @@ export default function RoomDetail() {
         specialRequests: bookingData.specialRequests || ''
       }
 
-      console.log('🎯 TENTATIVE RÉSERVATION [msylla01] - 2025-10-02 01:09:24')
+      console.log('🎯 TENTATIVE RÉSERVATION [msylla01] - 2025-10-03 10:21:08')
       console.log('📋 Données envoyées:', requestData)
 
       const token = localStorage.getItem('hotel_token')
@@ -357,13 +418,13 @@ export default function RoomDetail() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des détails...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-02 01:09:24</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 10:21:08</p>
         </div>
       </div>
     )
   }
 
-  if (!room || !user) {
+  if (!room) {
     return null
   }
 
@@ -395,19 +456,81 @@ export default function RoomDetail() {
               </div>
 
               <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">
-                  {user.firstName} {user.lastName}
-                </span>
-                <Link
-                  href="/dashboard"
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Mon Espace
-                </Link>
+                {isConnected && user ? (
+                  <>
+                    <span className="text-sm text-gray-600">
+                      {user.firstName} {user.lastName}
+                    </span>
+                    <div className={`text-xs px-2 py-1 rounded-full ${
+                      user.isActive 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-orange-100 text-orange-800'
+                    }`}>
+                      {user.isActive ? '✅ Actif' : '⚠️ Inactif'}
+                    </div>
+                    <Link
+                      href="/dashboard"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Mon Espace
+                    </Link>
+                  </>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <Link
+                      href="/auth/login"
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    >
+                      Se connecter
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      S'inscrire
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </header>
+
+        {/* Message pour visiteurs non connectés */}
+        {!isConnected && (
+          <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex">
+                <div className="ml-3">
+                  <p className="text-blue-700">
+                    👀 Vous consultez cette chambre en tant que visiteur. 
+                    <Link href="/auth/login" className="font-medium underline ml-1">
+                      Connectez-vous
+                    </Link> pour la réserver ou l'ajouter à vos favoris.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Message pour compte inactif */}
+        {isConnected && user && !user.isActive && (
+          <div className="bg-orange-50 border-l-4 border-orange-400 p-4">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex">
+                <div className="ml-3">
+                  <p className="text-orange-700">
+                    ⚠️ Votre compte est désactivé. 
+                    <Link href="/auth/reactivate" className="font-medium underline ml-1">
+                      Réactivez-le
+                    </Link> pour pouvoir réserver cette chambre.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -445,6 +568,28 @@ export default function RoomDetail() {
                         <span>Disponible</span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Bouton favori */}
+                  <div className="absolute top-4 right-4">
+                    <button
+                      onClick={toggleFavorite}
+                      className={`p-2 rounded-full shadow-lg transition-colors ${
+                        isConnected && favoriteRooms.includes(room.id)
+                          ? 'bg-red-500 text-white'
+                          : 'bg-white text-gray-600 hover:text-red-500'
+                      }`}
+                      title={isConnected ? 
+                        (favoriteRooms.includes(room.id) ? 'Retirer des favoris' : 'Ajouter aux favoris') : 
+                        'Se connecter pour favoris'
+                      }
+                    >
+                      {isConnected && favoriteRooms.includes(room.id) ? (
+                        <HeartIconSolid className="w-5 h-5" />
+                      ) : (
+                        <HeartIcon className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -488,6 +633,9 @@ export default function RoomDetail() {
                   <div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">
                       {room.name}
+                      {isConnected && favoriteRooms.includes(room.id) && (
+                        <HeartIconSolid className="w-8 h-8 text-red-500 inline ml-3" />
+                      )}
                     </h1>
                     <div className="flex items-center space-x-6 text-gray-600">
                       <div className="flex items-center space-x-1">
@@ -575,14 +723,44 @@ export default function RoomDetail() {
               >
                 <div className="text-center mb-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                    🎯 Réserver cette chambre
+                    {isConnected ? '🎯 Réserver cette chambre' : '🔑 Réservation'}
                   </h2>
                   <p className="text-gray-600 text-sm">
-                    Complétez vos informations pour réserver
+                    {isConnected 
+                      ? 'Complétez vos informations pour réserver' 
+                      : 'Connectez-vous pour réserver cette chambre'
+                    }
                   </p>
                 </div>
 
-                {!user.isActive && (
+                {/* Message si non connecté */}
+                {!isConnected && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <div className="text-center">
+                      <p className="text-blue-800 text-sm mb-3">
+                        🔑 <strong>Connexion requise</strong><br/>
+                        Pour réserver cette chambre, vous devez avoir un compte.
+                      </p>
+                      <div className="space-y-2">
+                        <Link
+                          href="/auth/login"
+                          className="block w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        >
+                          Se connecter
+                        </Link>
+                        <Link
+                          href="/auth/register"
+                          className="block w-full border border-blue-600 text-blue-600 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+                        >
+                          Créer un compte
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Message si compte inactif */}
+                {isConnected && user && !user.isActive && (
                   <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
                     <p className="text-orange-800 text-sm text-center">
                       ⚠️ Votre compte est désactivé. 
@@ -600,136 +778,169 @@ export default function RoomDetail() {
                 )}
 
                 <div className="space-y-4">
-                  {/* Dates avec validation améliorée */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Arrivée (à partir de 14h)
-                      </label>
-                      <input
-                        type="date"
-                        value={bookingData.checkIn}
-                        onChange={(e) => {
-                          setBookingData({...bookingData, checkIn: e.target.value})
-                          if (bookingError) setBookingError('')
-                        }}
-                        min={new Date().toISOString().split('T')[0]}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                  {/* Prix affiché même si non connecté */}
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <div className="text-3xl font-bold text-blue-600 mb-1">
+                      {room.price}€
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Départ (avant 11h)
-                      </label>
-                      <input
-                        type="date"
-                        value={bookingData.checkOut}
-                        onChange={(e) => {
-                          setBookingData({...bookingData, checkOut: e.target.value})
-                          if (bookingError) setBookingError('')
-                        }}
-                        min={bookingData.checkIn || new Date().toISOString().split('T')[0]}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
+                    <div className="text-gray-600">par nuit</div>
                   </div>
 
-                  {/* Nombre de personnes */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nombre de personnes
-                    </label>
-                    <div className="flex items-center justify-between border border-gray-300 rounded-lg p-2">
-                      <button
-                        type="button"
-                        onClick={() => setBookingData({
-                          ...bookingData, 
-                          guests: Math.max(1, bookingData.guests - 1)
-                        })}
-                        className="p-1 hover:bg-gray-100 rounded"
-                        disabled={bookingData.guests <= 1}
-                      >
-                        <MinusIcon className="w-4 h-4 text-gray-600" />
-                      </button>
-                      
-                      <div className="flex items-center space-x-2">
-                        <UsersIcon className="w-4 h-4 text-gray-600" />
-                        <span className="font-medium">{bookingData.guests}</span>
+                  {/* Formulaire de réservation (seulement si connecté et actif) */}
+                  {isConnected && user?.isActive && (
+                    <>
+                      {/* Dates avec validation améliorée */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Arrivée (à partir de 14h)
+                          </label>
+                          <input
+                            type="date"
+                            value={bookingData.checkIn}
+                            onChange={(e) => {
+                              setBookingData({...bookingData, checkIn: e.target.value})
+                              if (bookingError) setBookingError('')
+                            }}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Départ (avant 11h)
+                          </label>
+                          <input
+                            type="date"
+                            value={bookingData.checkOut}
+                            onChange={(e) => {
+                              setBookingData({...bookingData, checkOut: e.target.value})
+                              if (bookingError) setBookingError('')
+                            }}
+                            min={bookingData.checkIn || new Date().toISOString().split('T')[0]}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
                       </div>
-                      
-                      <button
-                        type="button"
-                        onClick={() => setBookingData({
-                          ...bookingData, 
-                          guests: Math.min(room.capacity, bookingData.guests + 1)
-                        })}
-                        className="p-1 hover:bg-gray-100 rounded"
-                        disabled={bookingData.guests >= room.capacity}
-                      >
-                        <PlusIcon className="w-4 h-4 text-gray-600" />
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Maximum {room.capacity} personne(s) pour cette chambre
-                    </p>
-                  </div>
 
-                  {/* Demandes spéciales */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Demandes spéciales (optionnel)
-                    </label>
-                    <textarea
-                      value={bookingData.specialRequests}
-                      onChange={(e) => setBookingData({...bookingData, specialRequests: e.target.value})}
-                      rows={3}
-                      placeholder="Étage élevé, vue mer, lit king size..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
+                      {/* Nombre de personnes */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Nombre de personnes
+                        </label>
+                        <div className="flex items-center justify-between border border-gray-300 rounded-lg p-2">
+                          <button
+                            type="button"
+                            onClick={() => setBookingData({
+                              ...bookingData, 
+                              guests: Math.max(1, bookingData.guests - 1)
+                            })}
+                            className="p-1 hover:bg-gray-100 rounded"
+                            disabled={bookingData.guests <= 1}
+                          >
+                            <MinusIcon className="w-4 h-4 text-gray-600" />
+                          </button>
+                          
+                          <div className="flex items-center space-x-2">
+                            <UsersIcon className="w-4 h-4 text-gray-600" />
+                            <span className="font-medium">{bookingData.guests}</span>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setBookingData({
+                              ...bookingData, 
+                              guests: Math.min(room.capacity, bookingData.guests + 1)
+                            })}
+                            className="p-1 hover:bg-gray-100 rounded"
+                            disabled={bookingData.guests >= room.capacity}
+                          >
+                            <PlusIcon className="w-4 h-4 text-gray-600" />
+                          </button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Maximum {room.capacity} personne(s) pour cette chambre
+                        </p>
+                      </div>
 
-                  {/* Récapitulatif */}
-                  {bookingData.checkIn && bookingData.checkOut && (
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <h4 className="font-semibold text-blue-900 mb-2">
-                        💰 Récapitulatif
-                      </h4>
-                      <div className="text-xs text-blue-700 mb-2">
-                        📍 Arrivée: à partir de 14h • Départ: avant 11h
+                      {/* Demandes spéciales */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Demandes spéciales (optionnel)
+                        </label>
+                        <textarea
+                          value={bookingData.specialRequests}
+                          onChange={(e) => setBookingData({...bookingData, specialRequests: e.target.value})}
+                          rows={3}
+                          placeholder="Étage élevé, vue mer, lit king size..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
                       </div>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-blue-700">Durée:</span>
-                          <span className="font-medium text-blue-900">
-                            {getNights()} nuit(s)
-                          </span>
+
+                      {/* Récapitulatif */}
+                      {bookingData.checkIn && bookingData.checkOut && (
+                        <div className="bg-blue-50 rounded-lg p-4">
+                          <h4 className="font-semibold text-blue-900 mb-2">
+                            💰 Récapitulatif
+                          </h4>
+                          <div className="text-xs text-blue-700 mb-2">
+                            📍 Arrivée: à partir de 14h • Départ: avant 11h
+                          </div>
+                          <div className="space-y-1 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-blue-700">Durée:</span>
+                              <span className="font-medium text-blue-900">
+                                {getNights()} nuit(s)
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-blue-700">Prix par nuit:</span>
+                              <span className="font-medium text-blue-900">
+                                {room.price}€
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-blue-200 pt-1">
+                              <span className="font-semibold text-blue-900">Total:</span>
+                              <span className="font-bold text-blue-900 text-lg">
+                                {calculateTotal()}€
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-blue-700">Prix par nuit:</span>
-                          <span className="font-medium text-blue-900">
-                            {room.price}€
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-t border-blue-200 pt-1">
-                          <span className="font-semibold text-blue-900">Total:</span>
-                          <span className="font-bold text-blue-900 text-lg">
-                            {calculateTotal()}€
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                      )}
+                    </>
                   )}
 
-                  {/* Bouton de réservation */}
+                  {/* Bouton de réservation conditionnel */}
                   <button
                     onClick={handleBooking}
-                    disabled={!user.isActive || bookingLoading || !bookingData.checkIn || !bookingData.checkOut}
-                    className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2"
+                    disabled={
+                      bookingLoading || 
+                      (!isConnected || !user?.isActive) && !(!isConnected) ||
+                      (isConnected && user?.isActive && (!bookingData.checkIn || !bookingData.checkOut))
+                    }
+                    className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2 ${
+                      !isConnected 
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : !user?.isActive
+                          ? 'bg-orange-600 text-white hover:bg-orange-700'
+                          : bookingData.checkIn && bookingData.checkOut
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                    }`}
                   >
                     {bookingLoading ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                         <span>Réservation...</span>
+                      </>
+                    ) : !isConnected ? (
+                      <>
+                        <span>🔑 Se connecter pour réserver</span>
+                      </>
+                    ) : !user?.isActive ? (
+                      <>
+                        <span>⚠️ Réactiver pour réserver</span>
                       </>
                     ) : (
                       <>
@@ -744,7 +955,7 @@ export default function RoomDetail() {
                     )}
                   </button>
 
-                  {/* Garanties */}
+                  {/* Garanties (toujours affichées) */}
                   <div className="pt-4 border-t border-gray-200">
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
@@ -762,7 +973,7 @@ export default function RoomDetail() {
                     </div>
                   </div>
 
-                  {/* Contact */}
+                  {/* Contact (toujours affiché) */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="font-semibold text-gray-900 mb-2">
                       📞 Besoin d'aide ?
@@ -772,7 +983,7 @@ export default function RoomDetail() {
                     </p>
                     <div className="space-y-1 text-sm">
                       <div className="text-gray-700">
-                        📱 +33 1 23 45 67 89
+                        📱 +221 33 123 45 67
                       </div>
                       <div className="text-gray-700">
                         ✉️ contact@hotel-luxe.fr
@@ -795,7 +1006,7 @@ export default function RoomDetail() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Détail chambre Hotel Luxe • JSX corrigé • msylla01 • 2025-10-02 01:09:24 UTC
+              Détail chambre Hotel Luxe • Accessible à tous • Réservation avec connexion • msylla01 • 2025-10-03 10:21:08 UTC
             </p>
           </motion.div>
         </main>
