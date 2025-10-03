@@ -61,7 +61,7 @@ export default function AdminDashboard() {
       setLoading(true)
       setError(null)
       
-      console.log('📊 Récupération données dashboard admin [msylla01] - 2025-10-03 17:36:40')
+      console.log('📊 Récupération données dashboard admin [msylla01] - 2025-10-03 20:04:56')
       
       const token = localStorage.getItem('hotel_token')
       const response = await fetch('http://localhost:5000/api/admin/dashboard', {
@@ -187,7 +187,7 @@ export default function AdminDashboard() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement dashboard admin...</p>
           <p className="text-xs text-gray-500 mt-2">Récupération données Prisma PostgreSQL</p>
-          <p className="text-xs text-gray-500">msylla01 • 2025-10-03 17:36:40</p>
+          <p className="text-xs text-gray-500">msylla01 • 2025-10-03 20:04:56</p>
         </div>
       </div>
     )
@@ -258,6 +258,9 @@ export default function AdminDashboard() {
                 </Link>
                 <Link href="/admin/users" className="text-gray-600 hover:text-red-600 transition-colors">
                   Clients ({metrics.totalUsers})
+                </Link>
+                <Link href="/admin/revenue" className="text-gray-600 hover:text-red-600 transition-colors font-medium">
+                  💰 Revenus & CA
                 </Link>
               </nav>
 
@@ -411,9 +414,17 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Actions rapides */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          {/* Actions rapides avec Revenus & CA ajouté */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
             {[
+              {
+                title: 'Revenus & CA',
+                description: 'Chiffres d\'affaires détaillés',
+                icon: BanknotesIcon,
+                href: '/admin/revenue',
+                color: 'bg-green-500 hover:bg-green-600',
+                badge: 'NEW'
+              },
               {
                 title: 'Gérer Utilisateurs',
                 description: `${metrics.totalUsers} clients`,
@@ -427,7 +438,7 @@ export default function AdminDashboard() {
                 description: `${metrics.totalRooms} chambres`,
                 icon: HomeIcon,
                 href: '/admin/rooms',
-                color: 'bg-green-500 hover:bg-green-600'
+                color: 'bg-indigo-500 hover:bg-indigo-600'
               },
               {
                 title: 'Réservations',
@@ -621,7 +632,7 @@ export default function AdminDashboard() {
             </motion.div>
           </div>
 
-          {/* Status et liens utiles */}
+          {/* Status et liens utiles avec lien Revenus */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -656,12 +667,20 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* Liens utiles */}
+              {/* Liens utiles avec Revenus & CA */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">
                   🔗 Accès Rapide
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    href="/admin/revenue"
+                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
+                  >
+                    <BanknotesIcon className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                    <p className="text-xs font-medium text-gray-900">Revenus & CA</p>
+                  </Link>
+                  
                   <a
                     href="http://localhost:5000/api/admin/dashboard"
                     target="_blank"
@@ -689,24 +708,16 @@ export default function AdminDashboard() {
                     <HomeIcon className="w-5 h-5 text-blue-600 mx-auto mb-1" />
                     <p className="text-xs font-medium text-gray-900">Site Public</p>
                   </Link>
-                  
-                  <button
-                    onClick={fetchDashboardData}
-                    className="p-3 text-center border border-gray-200 rounded-lg hover:border-gray-300 hover:bg-gray-50 transition-colors"
-                  >
-                    <ArrowRightIcon className="w-5 h-5 text-gray-600 mx-auto mb-1" />
-                    <p className="text-xs font-medium text-gray-900">Actualiser</p>
-                  </button>
                 </div>
               </div>
             </div>
             
             <div className="mt-6 p-4 bg-gray-50 rounded-lg text-center">
               <p className="text-sm text-gray-600">
-                ✅ Dashboard Admin Full-Stack avec Prisma PostgreSQL • 2025-10-03 17:36:40 UTC • msylla01
+                ✅ Dashboard Admin avec Revenus & CA • 2025-10-03 20:04:56 UTC • msylla01
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                🗄️ Données temps réel • 👑 Gestion complète • 📊 {Object.keys(metrics).length} métriques
+                🗄️ Données temps réel • 👑 Gestion complète • 💰 Revenus intégrés • 📊 {Object.keys(metrics).length} métriques
               </p>
             </div>
           </motion.div>
@@ -715,3 +726,4 @@ export default function AdminDashboard() {
     </>
   )
 }
+

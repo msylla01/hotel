@@ -639,3 +639,327 @@ router.get('/users/:id', adminAuth, async (req, res) => {
     });
   }
 });
+
+// GET /api/admin/revenue - Statistiques de revenus détaillées (admin)
+router.get('/revenue', adminAuth, async (req, res) => {
+  try {
+    console.log('💰 Récupération données revenus [msylla01] - 2025-10-03 19:38:06');
+
+    const { period = 'month', year = new Date().getFullYear() } = req.query;
+
+    // Calculer les dates de début et fin selon la période
+    const currentDate = new Date();
+    const currentYear = parseInt(year);
+    
+    let startDate, endDate;
+    
+    if (period === 'year') {
+      startDate = new Date(currentYear, 0, 1); // 1er janvier
+      endDate = new Date(currentYear, 11, 31, 23, 59, 59); // 31 décembre
+    } else if (period === 'month') {
+      startDate = new Date(currentYear, currentDate.getMonth(), 1); // 1er du mois
+      endDate = new Date(currentYear, currentDate.getMonth() + 1, 0, 23, 59, 59); // Dernier jour du mois
+    } else if (period === 'week') {
+      const startOfWeek = new Date(currentDate);
+      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+      
+      startDate = startOfWeek;
+      endDate = endOfWeek;
+    } else {
+      // Par défaut: mois actuel
+      startDate = new Date(currentYear, currentDate.getMonth(), 1);
+      endDate = new Date(currentYear, currentDate.getMonth() + 1, 0, 23, 59, 59);
+    }
+
+    // Récupérer toutes les données nécessaires
+    const [
+      allBookings,
+      allPayments,
+      rooms,
+      users,
+      reviews,
+      periodBookings,
+      periodPayments
+    ] = await Promise.all([
+      // Toutes les réservations
+      prisma.booking.findMany({
+        include: {
+          room: {
+            select: { name: true, type: true, price: true }
+          },
+          user: {
+            select: { firstName: true, lastName: true, email: true }
+          },
+          payment: true
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Tous les paiements
+      prisma.payment.findMany({
+        include: {
+          booking: {
+            include: {
+              room: { select: { name: true, type: true } },
+              user: { select: { firstName: true, lastName: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      }),
+
+      // Chambres
+      prisma.room.findMany(),
+
+      // Utilisateurs
+      prisma.user.findMany({
+        select: { id: true, role: true, createdAt: true }
+      }),
+
+      // Avis
+      prisma.review.findMany({
+        select: { rating: true, createdAt: true, roomId: true }
+      }),
+
+      // Réservations de la période
+      prisma.booking.findMany({
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate
+          }
+        },
+        include: {
+          room: { select: { name: true, type: true } },
+          payment: true
+        }
+      }),
+
+      // Paiements de la période
+      prisma.payment.findMany({
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate
+          }
+        },
+        include: {
+          booking: {
+            include: {
+              room: { select: { name: true, type: true } }
+            }
+          }
+        }
+      })
+    ]);
+
+    // Calculer les revenus par statut
+    const calculateRevenue = (bookings, status = null) => {
+      const filteredBookings = status 
+        ? bookings.filter(b => b.status === status)
+        : bookings.filter(b => ['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(b.status));
+      
+      return filteredBookings.reduce((sum, booking) => sum + Number(booking.totalAmount), 0);
+    };
+
+    // Revenus totaux (historique)
+    const totalRevenue = calculateRevenue(allBookings);
+    const totalRevenueConfirmed = calculateRevenue(allBookings, 'CONFIRMED');
+    const totalRevenueCompleted = calculateRevenue(allBookings, 'COMPLETED');
+    const totalRevenuePending = allBookings
+      .filter(b => b.status === 'PENDING')
+      .reduce((sum, b) => sum + Number(b.totalAmount), 0);
+
+    // Revenus de la période
+    const periodRevenue = calculateRevenue(periodBookings);
+    const periodRevenueConfirmed = calculateRevenue(periodBookings, 'CONFIRMED');
+    const periodRevenueCompleted = calculateRevenue(periodBookings, 'COMPLETED');
+
+    // Revenus par type de chambre
+    const revenueByRoomType = {};
+    allBookings.forEach(booking => {
+      if (['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(booking.status)) {
+        const type = booking.room.type;
+        revenueByRoomType[type] = (revenueByRoomType[type] || 0) + Number(booking.totalAmount);
+      }
+    });
+
+    // Revenus par chambre (top 10)
+    const revenueByRoom = {};
+    allBookings.forEach(booking => {
+      if (['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(booking.status)) {
+        const roomName = booking.room.name;
+        revenueByRoom[roomName] = (revenueByRoom[roomName] || 0) + Number(booking.totalAmount);
+      }
+    });
+
+    const topRooms = Object.entries(revenueByRoom)
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    // Analyse des paiements
+    const paymentStats = {
+      total: allPayments.length,
+      completed: allPayments.filter(p => p.status === 'COMPLETED').length,
+      pending: allPayments.filter(p => p.status === 'PENDING').length,
+      failed: allPayments.filter(p => p.status === 'FAILED').length,
+      byMethod: {}
+    };
+
+    // Revenus par méthode de paiement
+    allPayments.forEach(payment => {
+      if (payment.status === 'COMPLETED') {
+        const method = payment.method;
+        paymentStats.byMethod[method] = (paymentStats.byMethod[method] || 0) + Number(payment.amount);
+      }
+    });
+
+    // Évolution des revenus (12 derniers mois)
+    const monthlyRevenue = [];
+    for (let i = 11; i >= 0; i--) {
+      const monthDate = new Date();
+      monthDate.setMonth(monthDate.getMonth() - i);
+      monthDate.setDate(1);
+      monthDate.setHours(0, 0, 0, 0);
+      
+      const nextMonth = new Date(monthDate);
+      nextMonth.setMonth(monthDate.getMonth() + 1);
+      
+      const monthBookings = allBookings.filter(booking => {
+        const bookingDate = new Date(booking.createdAt);
+        return bookingDate >= monthDate && bookingDate < nextMonth &&
+               ['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(booking.status);
+      });
+      
+      const monthRevenue = monthBookings.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+      
+      monthlyRevenue.push({
+        month: monthDate.toISOString().slice(0, 7), // YYYY-MM
+        monthName: monthDate.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
+        revenue: monthRevenue,
+        bookings: monthBookings.length
+      });
+    }
+
+    // Calcul période précédente pour comparaison
+    let prevStartDate, prevEndDate;
+    if (period === 'month') {
+      prevStartDate = new Date(currentYear, currentDate.getMonth() - 1, 1);
+      prevEndDate = new Date(currentYear, currentDate.getMonth(), 0, 23, 59, 59);
+    } else if (period === 'year') {
+      prevStartDate = new Date(currentYear - 1, 0, 1);
+      prevEndDate = new Date(currentYear - 1, 11, 31, 23, 59, 59);
+    } else {
+      prevStartDate = new Date(startDate);
+      prevStartDate.setDate(startDate.getDate() - 7);
+      prevEndDate = new Date(endDate);
+      prevEndDate.setDate(endDate.getDate() - 7);
+    }
+
+    const prevPeriodBookings = allBookings.filter(booking => {
+      const bookingDate = new Date(booking.createdAt);
+      return bookingDate >= prevStartDate && bookingDate <= prevEndDate;
+    });
+
+    const prevPeriodRevenue = calculateRevenue(prevPeriodBookings);
+    const revenueGrowth = prevPeriodRevenue > 0 
+      ? Math.round(((periodRevenue - prevPeriodRevenue) / prevPeriodRevenue) * 100)
+      : 100;
+
+    // Métriques avancées
+    const averageOrderValue = periodBookings.length > 0 
+      ? periodRevenue / periodBookings.length 
+      : 0;
+
+    const conversionRate = users.length > 0 
+      ? Math.round((periodBookings.length / users.length) * 100)
+      : 0;
+
+    // Préparer la réponse
+    const revenueData = {
+      period: {
+        type: period,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        label: period === 'month' ? 'Ce mois' : 
+               period === 'year' ? 'Cette année' : 
+               'Cette semaine'
+      },
+
+      summary: {
+        totalRevenue,
+        periodRevenue,
+        revenueGrowth,
+        averageOrderValue,
+        conversionRate,
+        totalBookings: allBookings.length,
+        periodBookings: periodBookings.length,
+        totalRooms: rooms.length,
+        totalUsers: users.length
+      },
+
+      breakdown: {
+        confirmed: periodRevenueConfirmed,
+        completed: periodRevenueCompleted,
+        pending: totalRevenuePending,
+        byRoomType: revenueByRoomType,
+        topRooms
+      },
+
+      payments: paymentStats,
+
+      trends: {
+        monthly: monthlyRevenue,
+        growth: revenueGrowth,
+        previousPeriod: prevPeriodRevenue
+      },
+
+      recentTransactions: allPayments
+        .filter(p => p.status === 'COMPLETED')
+        .slice(0, 10)
+        .map(payment => ({
+          id: payment.id,
+          amount: payment.amount,
+          method: payment.method,
+          date: payment.createdAt,
+          booking: {
+            id: payment.booking.id,
+            room: payment.booking.room.name,
+            user: `${payment.booking.user.firstName} ${payment.booking.user.lastName}`
+          }
+        }))
+    };
+
+    console.log(`✅ Données revenus calculées [msylla01]: ${formatCurrency(periodRevenue)} (${period})`);
+
+    res.json({
+      success: true,
+      data: revenueData,
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur récupération revenus [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des données de revenus',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Fonction utilitaire pour formater la monnaie
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'EUR'
+  }).format(amount);
+}
