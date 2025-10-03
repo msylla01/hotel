@@ -85,7 +85,7 @@ export default function AdminUsers() {
         }
         setStats(statsData)
         
-        console.log(`✅ ${data.users.length} utilisateurs chargés [msylla01] - 2025-10-03 17:51:35`)
+        console.log(`✅ ${data.users.length} utilisateurs chargés [msylla01] - 2025-10-03 19:13:54`)
       }
     } catch (error) {
       console.error('❌ Erreur chargement utilisateurs [msylla01]:', error)
@@ -176,7 +176,7 @@ export default function AdminUsers() {
                 <span className="text-sm text-gray-600">
                   👤 {user?.firstName} {user?.lastName}
                 </span>
-                <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Admin</span>
+                <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs">👑 Admin</span>
               </div>
             </div>
           </div>
@@ -318,10 +318,7 @@ export default function AdminUsers() {
                           Statut
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Réservations
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Total Dépensé
+                          Activité
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                           Inscription
@@ -373,21 +370,33 @@ export default function AdminUsers() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {user.totalBookings || 0} réservations
-                            {user.totalReviews > 0 && (
-                              <div className="text-xs text-gray-500">
-                                {user.totalReviews} avis • ⭐ {user.averageRating}
+                            <div>
+                              <span>{user.totalBookings || 0} réservations</span>
+                              {user.totalReviews > 0 && (
+                                <div className="text-xs text-gray-500">
+                                  {user.totalReviews} avis • ⭐ {user.averageRating || '0.0'}
+                                </div>
+                              )}
+                            </div>
+                            {user.totalSpent > 0 && (
+                              <div className="text-xs text-green-600 font-medium">
+                                {formatCurrency(user.totalSpent)}
                               </div>
                             )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCurrency(user.totalSpent || 0)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {formatDate(user.createdAt)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <div className="flex items-center space-x-2">
+                              <Link
+                                href={`/admin/users/${user.id}`}
+                                className="text-blue-600 hover:text-blue-900"
+                                title="Voir détails"
+                              >
+                                <EyeIcon className="w-5 h-5" />
+                              </Link>
+                              
                               <button
                                 onClick={() => toggleUserStatus(user.id, user.isActive)}
                                 className={`${
@@ -398,14 +407,6 @@ export default function AdminUsers() {
                                 title={user.isActive ? 'Désactiver' : 'Activer'}
                               >
                                 {user.isActive ? <XCircleIcon className="w-5 h-5" /> : <CheckCircleIcon className="w-5 h-5" />}
-                              </button>
-                              
-                              <button
-                                onClick={() => alert(`Voir détails: ${user.firstName} ${user.lastName}`)}
-                                className="text-blue-600 hover:text-blue-900"
-                                title="Voir détails"
-                              >
-                                <EyeIcon className="w-5 h-5" />
                               </button>
                             </div>
                           </td>
@@ -456,7 +457,7 @@ export default function AdminUsers() {
 
           {/* Footer info */}
           <div className="mt-8 text-center text-gray-500 text-sm">
-            Gestion Utilisateurs • Données Prisma PostgreSQL • msylla01 • 2025-10-03 17:51:35
+            Gestion Utilisateurs avec détails • Données Prisma PostgreSQL • msylla01 • 2025-10-03 19:13:54
           </div>
         </main>
       </div>
