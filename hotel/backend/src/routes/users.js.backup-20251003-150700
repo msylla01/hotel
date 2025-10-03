@@ -1,14 +1,11 @@
 const express = require('express');
 const Joi = require('joi');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken'); // IMPORT MANQUANT
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
-console.log('👥 Chargement routes users [msylla01] - 2025-10-03 15:05:14');
 
 // Schema de validation pour mise à jour profil
 const updateProfileSchema = Joi.object({
@@ -314,10 +311,12 @@ router.get('/stats', authenticateToken, async (req, res) => {
   }
 });
 
+module.exports = router;
+
 // DELETE /api/users/account - Supprimer le compte utilisateur
 router.delete('/account', authenticateToken, async (req, res) => {
   try {
-    console.log('��️ Suppression compte [msylla01] - 2025-10-03 15:05:14:', req.user.id);
+    console.log('🗑️ Suppression compte [msylla01] - 2025-10-01 17:36:39:', req.user.id);
 
     const { password } = req.body;
 
@@ -374,6 +373,11 @@ router.delete('/account', authenticateToken, async (req, res) => {
 
     // Transaction pour supprimer toutes les données utilisateur
     await prisma.$transaction(async (tx) => {
+      // Supprimer les avis
+      await tx.review.deleteMany({
+        where: { userId: req.user.id }
+      });
+
       // Supprimer les paiements liés aux réservations de l'utilisateur
       await tx.payment.deleteMany({
         where: {
@@ -428,7 +432,7 @@ router.delete('/account', authenticateToken, async (req, res) => {
 // PUT /api/users/deactivate - Désactiver temporairement le compte
 router.put('/deactivate', authenticateToken, async (req, res) => {
   try {
-    console.log('⏸️ Désactivation temporaire compte [msylla01] - 2025-10-03 15:05:14:', req.user.id);
+    console.log('⏸️ Désactivation temporaire compte [msylla01] - 2025-10-01 17:47:22:', req.user.id);
 
     const { password, reason } = req.body;
 
@@ -536,7 +540,7 @@ router.put('/deactivate', authenticateToken, async (req, res) => {
 // PUT /api/users/reactivate - Réactiver le compte
 router.put('/reactivate', async (req, res) => {
   try {
-    console.log('▶️ Réactivation compte [msylla01] - 2025-10-03 15:05:14');
+    console.log('▶️ Réactivation compte [msylla01] - 2025-10-01 17:47:22');
 
     const { email, password } = req.body;
 
@@ -631,7 +635,7 @@ router.put('/reactivate', async (req, res) => {
         firstName: reactivatedUser.firstName,
         lastName: reactivatedUser.lastName
       },
-      process.env.JWT_SECRET || 'hotel-secret-key-msylla01',
+      process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -659,7 +663,3 @@ router.put('/reactivate', async (req, res) => {
     });
   }
 });
-
-console.log('✅ Routes users chargées [msylla01] - 2025-10-03 15:05:14');
-
-module.exports = router;

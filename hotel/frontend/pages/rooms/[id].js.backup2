@@ -20,6 +20,8 @@ import {
   PlusIcon
 } from '@heroicons/react/24/outline'
 import { StarIcon, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid'
+import ReviewsList from '../../components/reviews/ReviewsList'
+import CreateReview from '../../components/reviews/CreateReview'
 
 export default function RoomDetail() {
   const router = useRouter()
@@ -49,7 +51,7 @@ export default function RoomDetail() {
         const user = JSON.parse(userData)
         setUser(user)
         setIsConnected(true)
-        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 14:27:12:', user.firstName, user.lastName)
+        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 10:21:08:', user.firstName, user.lastName)
         loadFavorites()
       } catch (error) {
         console.log('❌ Erreur parsing user data:', error)
@@ -57,7 +59,7 @@ export default function RoomDetail() {
       }
     } else {
       setIsConnected(false)
-      console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 14:27:12')
+      console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 10:21:08')
     }
     
     if (id) {
@@ -107,7 +109,7 @@ export default function RoomDetail() {
     try {
       setLoading(true)
       
-      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-03 14:27:12:', id)
+      console.log('🏨 Récupération détail chambre API [msylla01] - 2025-10-03 10:21:08:', id)
       
       const response = await fetch(`http://localhost:5000/api/rooms/${id}`)
       
@@ -325,7 +327,7 @@ export default function RoomDetail() {
         specialRequests: bookingData.specialRequests || ''
       }
 
-      console.log('🎯 TENTATIVE RÉSERVATION [msylla01] - 2025-10-03 14:27:12')
+      console.log('🎯 TENTATIVE RÉSERVATION [msylla01] - 2025-10-03 10:21:08')
       console.log('📋 Données envoyées:', requestData)
 
       const token = localStorage.getItem('hotel_token')
@@ -418,7 +420,7 @@ export default function RoomDetail() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement des détails...</p>
-          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 14:27:12</p>
+          <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 10:21:08</p>
         </div>
       </div>
     )
@@ -648,7 +650,7 @@ export default function RoomDetail() {
                       </div>
                       <div className="flex items-center space-x-1">
                         <StarIcon className="w-5 h-5 text-yellow-400" />
-                        <span>{room.rating}/5 (note générale)</span>
+                        <span>{room.rating}/5 ({room.reviewCount || 0} avis)</span>
                       </div>
                     </div>
                   </div>
@@ -680,29 +682,33 @@ export default function RoomDetail() {
                   </div>
                 </div>
 
-                {/* Informations générales */}
-                <div className="bg-gray-50 rounded-lg p-6">
+                {/* Avis */}
+                <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    ℹ️ Informations pratiques
+                    ⭐ Note et avis clients
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <strong>✅ Inclus dans le prix :</strong>
-                      <ul className="mt-2 space-y-1 text-gray-600">
-                        <li>• WiFi gratuit haut débit</li>
-                        <li>• Petit-déjeuner continental</li>
-                        <li>• Service de ménage quotidien</li>
-                        <li>• Accès aux espaces communs</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <strong>🕐 Horaires :</strong>
-                      <ul className="mt-2 space-y-1 text-gray-600">
-                        <li>• Check-in : à partir de 14h00</li>
-                        <li>• Check-out : avant 11h00</li>
-                        <li>• Reception : 24h/24</li>
-                        <li>• Room service : 7h-23h</li>
-                      </ul>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="text-4xl font-bold text-blue-600">
+                        {room.rating}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-1 mb-1">
+                          {[...Array(5)].map((_, i) => (
+                            <StarIcon
+                              key={i}
+                              className={`w-5 h-5 ${
+                                i < Math.floor(room.rating) 
+                                  ? 'text-yellow-400' 
+                                  : 'text-gray-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-gray-600 text-sm">
+                          Basé sur {room.reviewCount || 0} avis clients
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -785,11 +791,11 @@ export default function RoomDetail() {
                   {/* Formulaire de réservation (seulement si connecté et actif) */}
                   {isConnected && user?.isActive && (
                     <>
-                      {/* Dates */}
+                      {/* Dates avec validation améliorée */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Arrivée (14h)
+                            Arrivée (à partir de 14h)
                           </label>
                           <input
                             type="date"
@@ -799,12 +805,12 @@ export default function RoomDetail() {
                               if (bookingError) setBookingError('')
                             }}
                             min={new Date().toISOString().split('T')[0]}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Départ (11h)
+                            Départ (avant 11h)
                           </label>
                           <input
                             type="date"
@@ -814,7 +820,7 @@ export default function RoomDetail() {
                               if (bookingError) setBookingError('')
                             }}
                             min={bookingData.checkIn || new Date().toISOString().split('T')[0]}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
                       </div>
@@ -855,7 +861,7 @@ export default function RoomDetail() {
                           </button>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          Maximum {room.capacity} personne(s)
+                          Maximum {room.capacity} personne(s) pour cette chambre
                         </p>
                       </div>
 
@@ -868,8 +874,8 @@ export default function RoomDetail() {
                           value={bookingData.specialRequests}
                           onChange={(e) => setBookingData({...bookingData, specialRequests: e.target.value})}
                           rows={3}
-                          placeholder="Étage élevé, vue mer..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          placeholder="Étage élevé, vue mer, lit king size..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
 
@@ -879,6 +885,9 @@ export default function RoomDetail() {
                           <h4 className="font-semibold text-blue-900 mb-2">
                             💰 Récapitulatif
                           </h4>
+                          <div className="text-xs text-blue-700 mb-2">
+                            📍 Arrivée: à partir de 14h • Départ: avant 11h
+                          </div>
                           <div className="space-y-1 text-sm">
                             <div className="flex justify-between">
                               <span className="text-blue-700">Durée:</span>
@@ -887,7 +896,7 @@ export default function RoomDetail() {
                               </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-blue-700">Prix/nuit:</span>
+                              <span className="text-blue-700">Prix par nuit:</span>
                               <span className="font-medium text-blue-900">
                                 {room.price}€
                               </span>
@@ -904,13 +913,12 @@ export default function RoomDetail() {
                     </>
                   )}
 
-                  {/* Bouton de réservation */}
+                  {/* Bouton de réservation conditionnel */}
                   <button
                     onClick={handleBooking}
                     disabled={
                       bookingLoading || 
-                      !isConnected || 
-                      !user?.isActive ||
+                      (!isConnected || !user?.isActive) && !(!isConnected) ||
                       (isConnected && user?.isActive && (!bookingData.checkIn || !bookingData.checkOut))
                     }
                     className={`w-full py-3 rounded-lg font-semibold transition-colors flex items-center justify-center space-x-2 ${
@@ -949,12 +957,12 @@ export default function RoomDetail() {
                     )}
                   </button>
 
-                  {/* Garanties */}
+                  {/* Garanties (toujours affichées) */}
                   <div className="pt-4 border-t border-gray-200">
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <ShieldCheckIcon className="w-4 h-4 text-green-500" />
-                        <span>Annulation gratuite 24h avant</span>
+                        <span>Annulation gratuite jusqu'à 24h avant</span>
                       </div>
                       <div className="flex items-center space-x-2 text-sm text-gray-600">
                         <CheckCircleIcon className="w-4 h-4 text-green-500" />
@@ -967,21 +975,51 @@ export default function RoomDetail() {
                     </div>
                   </div>
 
-                  {/* Contact */}
+                  {/* Contact (toujours affiché) */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h4 className="font-semibold text-gray-900 mb-2">
                       📞 Besoin d'aide ?
                     </h4>
+                    <p className="text-gray-600 text-sm mb-2">
+                      Notre équipe est là pour vous aider
+                    </p>
                     <div className="space-y-1 text-sm">
-                      <div className="text-gray-700">📱 +221 33 123 45 67</div>
-                      <div className="text-gray-700">✉️ contact@hotel-luxe.fr</div>
-                      <div className="text-gray-700">🕐 Support 24h/24</div>
+                      <div className="text-gray-700">
+                        📱 +221 33 123 45 67
+                      </div>
+                      <div className="text-gray-700">
+                        ✉️ contact@hotel-luxe.fr
+                      </div>
+                      <div className="text-gray-700">
+                        🕐 Support 24h/24
+                      </div>
                     </div>
                   </div>
                 </div>
               </motion.div>
             </div>
           </div>
+
+          {/* Section Avis */}
+          <div className="lg:col-span-3 mt-8">
+            <div className="space-y-8">
+              <CreateReview 
+                roomId={room.id} 
+                onReviewCreated={() => {
+                  // Forcer le rechargement des avis
+                  window.location.reload()
+                }}
+              />
+              <ReviewsList roomId={room.id} />
+            </div>
+          </div>
+              roomId={room.id}
+              onSuccess={(newReview) => {
+                console.log("✅ Nouvel avis ajouté [msylla01]:", newReview.id)
+                // Optionnel: recharger les avis
+              }}
+            />
+          )}
 
           {/* Footer */}
           <motion.div
@@ -991,7 +1029,7 @@ export default function RoomDetail() {
             className="mt-16 text-center text-gray-500"
           >
             <p className="text-sm">
-              Détail chambre Hotel Luxe • Réservation disponible • msylla01 • 2025-10-03 14:27:12 UTC
+              Détail chambre Hotel Luxe • Accessible à tous • Réservation avec connexion • msylla01 • 2025-10-03 10:21:08 UTC
             </p>
           </motion.div>
         </main>
