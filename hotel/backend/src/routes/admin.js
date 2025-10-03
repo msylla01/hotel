@@ -543,3 +543,99 @@ function getTimeAgo(date) {
 console.log('✅ Routes admin chargées [msylla01] - 2025-10-03 17:36:40');
 
 module.exports = router;
+
+// GET /api/admin/users/:id - Détails d'un utilisateur spécifique (admin)
+router.get('/users/:id', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`👤 Récupération détails utilisateur [msylla01] - 2025-10-03 19:13:54: ${id}`);
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        bookings: {
+          include: {
+            room: {
+              select: {
+                name: true,
+                type: true,
+                price: true
+              }
+            },
+            payment: {
+              select: {
+                status: true,
+                amount: true,
+                method: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        },
+        reviews: {
+          include: {
+            room: {
+              select: {
+                name: true,
+                type: true
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Calculer les statistiques de l'utilisateur
+    const userStats = {
+      totalBookings: user.bookings.length,
+      completedBookings: user.bookings.filter(b => ['COMPLETED', 'CHECKED_OUT'].includes(b.status)).length,
+      cancelledBookings: user.bookings.filter(b => b.status === 'CANCELLED').length,
+      totalSpent: user.bookings
+        .filter(b => ['CONFIRMED', 'COMPLETED', 'CHECKED_OUT'].includes(b.status))
+        .reduce((sum, b) => sum + Number(b.totalAmount), 0),
+      totalReviews: user.reviews.length,
+      averageRating: user.reviews.length > 0 
+        ? (user.reviews.reduce((sum, r) => sum + r.rating, 0) / user.reviews.length).toFixed(1)
+        : '0.0',
+      verifiedReviews: user.reviews.filter(r => r.verified).length,
+      lastBooking: user.bookings.length > 0 ? user.bookings[0].createdAt : null,
+      lastReview: user.reviews.length > 0 ? user.reviews[0].createdAt : null
+    };
+
+    // Masquer les informations sensibles
+    const { password, ...userWithoutPassword } = user;
+
+    const userWithStats = {
+      ...userWithoutPassword,
+      stats: userStats
+    };
+
+    console.log(`✅ Détails utilisateur récupérés [msylla01]: ${user.firstName} ${user.lastName}`);
+
+    res.json({
+      success: true,
+      user: userWithStats,
+      timestamp: new Date().toISOString(),
+      developer: 'msylla01'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur récupération détails utilisateur [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des détails utilisateur',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
