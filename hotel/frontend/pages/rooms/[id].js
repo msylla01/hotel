@@ -3,6 +3,8 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
+import RoomReviews from '../../components/reviews/RoomReviews'
+import WriteReview from '../../components/reviews/WriteReview'
 import { 
   ArrowLeftIcon,
   UsersIcon,
@@ -30,6 +32,7 @@ export default function RoomDetail() {
   const [loading, setLoading] = useState(true)
   const [favoriteRooms, setFavoriteRooms] = useState([])
   const [selectedImage, setSelectedImage] = useState(0)
+  const [showWriteReview, setShowWriteReview] = useState(false)
   const [bookingData, setBookingData] = useState({
     checkIn: '',
     checkOut: '',
@@ -982,6 +985,36 @@ export default function RoomDetail() {
               </motion.div>
             </div>
           </div>
+
+          {/* Section Avis Clients */}
+          <div className="mt-12">
+            <RoomReviews 
+              roomId={room.id} 
+              onWriteReview={() => {
+                if (!isConnected) {
+                  const confirmLogin = window.confirm("Connectez-vous pour laisser un avis.\n\nSouhaitez-vous vous connecter maintenant ?")
+                  if (confirmLogin) {
+                    router.push(`/auth/login?redirect=/rooms/${room.id}`)
+                  }
+                  return
+                }
+                setShowWriteReview(true)
+              }}
+            />
+          </div>
+          
+          {/* Modal écriture avis */}
+          {showWriteReview && (
+            <WriteReview
+              roomId={room.id}
+              onClose={() => setShowWriteReview(false)}
+              onSuccess={(newReview) => {
+                console.log("✅ Nouvel avis ajouté [msylla01]:", newReview.id)
+                setShowWriteReview(false)
+                window.location.reload() // Recharger pour voir le nouvel avis
+              }}
+            />
+          )}
 
           {/* Footer */}
           <motion.div

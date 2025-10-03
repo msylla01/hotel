@@ -71,7 +71,6 @@ model Booking {
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
   payment         Payment[]
-  review          Review?       // NOUVEAU: Une réservation peut avoir un avis
 
   @@map("bookings")
 }
@@ -97,51 +96,23 @@ model Payment {
 }
 
 model Review {
-  id                 String    @id @default(cuid())
-  
-  // Relations de base
-  userId             String
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  roomId             String  
-  room               Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  
-  bookingId          String?   @unique // NOUVEAU: Lien vers réservation (optionnel)
-  booking            Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  
-  // Contenu de l'avis (AMÉLIORÉ)
-  rating             Int       // 1-5 étoiles
-  title              String?   // NOUVEAU: Titre de l'avis
-  comment            String?   // Commentaire principal
-  
-  // Détails supplémentaires (NOUVEAUX)
-  pros               String[]  @default([]) // Points positifs
-  cons               String[]  @default([]) // Points négatifs
-  recommendToFriends Boolean?  // Recommande à des amis
-  
-  // Métadonnées (AMÉLIORÉES)
-  verified           Boolean   @default(false) // NOUVEAU: Avis vérifié (via réservation)
-  helpful            Int       @default(0)     // NOUVEAU: Nombre de votes "utile"
-  isApproved         Boolean   @default(false) // Existant: Modération
-  
-  // Réponse de l'hôtel (NOUVEAUX)
-  response           String?   // Réponse de l'administration
-  responseDate       DateTime? // Date de la réponse
-  responseBy         String?   // ID de l'admin qui a répondu
-  
-  // Timestamps
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  userId          String
+  roomId          String
+  rating          Int       // 1 à 5 étoiles
+  comment         String?
+  isApproved      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room            Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@map("reviews")
-  @@index([roomId])     // Index pour performances
-  @@index([userId])     // Index pour performances
-  @@index([rating])     // Index pour filtres
-  @@index([verified])   // Index pour avis vérifiés
-  @@index([createdAt])  // Index pour tri chronologique
 }
 
-// Enums existants
+// Enums
 enum Role {
   CLIENT
   ADMIN
