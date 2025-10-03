@@ -8,15 +8,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [allRoomImages, setAllRoomImages] = useState([])
-  const [recentReviews, setRecentReviews] = useState([])
-  const [reviewsLoading, setReviewsLoading] = useState(true)
   const [stats, setStats] = useState({
     totalRooms: 0,
     averageRating: 4.8,
     totalBookings: 0,
-    activeRooms: 0,
-    totalReviews: 0,
-    averageReviewRating: 4.8
+    activeRooms: 0
   })
 
   useEffect(() => {
@@ -25,9 +21,9 @@ export default function Home() {
       const userData = localStorage.getItem('hotel_user')
       if (userData) {
         setUser(JSON.parse(userData))
-        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 16:33:47:', JSON.parse(userData).firstName)
+        console.log('👤 Utilisateur connecté [msylla01] - 2025-10-03 10:47:18:', JSON.parse(userData).firstName)
       } else {
-        console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 16:33:47')
+        console.log('👥 Visiteur non connecté [msylla01] - 2025-10-03 10:47:18')
       }
     } catch (error) {
       console.log('❌ Erreur parsing user data [msylla01]:', error)
@@ -35,13 +31,12 @@ export default function Home() {
 
     // Récupérer les vraies données de la base
     fetchRealDataFromDB()
-    fetchRecentReviews()
   }, [])
 
   const fetchRealDataFromDB = async () => {
     try {
       setLoading(true)
-      console.log('🗄️ Récupération VRAIES données DB [msylla01] - 2025-10-03 16:33:47')
+      console.log('🗄️ Récupération VRAIES données DB [msylla01] - 2025-10-03 10:47:18')
       
       // Récupérer les chambres depuis l'API backend
       const roomsResponse = await fetch('http://localhost:5000/api/rooms')
@@ -83,52 +78,27 @@ export default function Home() {
           
           setAllRoomImages(allImages)
           
-          // Récupérer les statistiques reviews pour chaque chambre
-          const roomsWithReviews = await Promise.all(
-            realRooms.map(async (room) => {
-              try {
-                const reviewsResponse = await fetch(`http://localhost:5000/api/reviews/room/${room.id}/stats`)
-                const reviewsData = await reviewsResponse.json()
-                
-                if (reviewsData.success) {
-                  return {
-                    ...room,
-                    reviewStats: reviewsData.stats
-                  }
-                }
-                return room
-              } catch (error) {
-                console.log(`❌ Erreur stats reviews pour ${room.id}:`, error)
-                return room
-              }
-            })
-          )
-          
-          setRooms(roomsWithReviews)
-          
-          // Calculer les stats globales avec reviews
-          const totalReviews = roomsWithReviews.reduce((acc, room) => 
-            acc + (room.reviewStats?.totalReviews || 0), 0
-          )
-          
-          const averageReviewRating = roomsWithReviews
-            .filter(room => room.reviewStats?.totalReviews > 0)
-            .reduce((acc, room, _, arr) => 
-              acc + parseFloat(room.reviewStats.averageRating || 0) / arr.length, 0
-            )
-          
+          // Calculer les stats réelles
           const realStats = {
             totalRooms: realRooms.length,
             averageRating: realRooms.reduce((acc, room) => acc + (room.rating || room.averageRating || 4.8), 0) / realRooms.length,
-            activeRooms: realRooms.filter(room => room.isActive !== false).length,
-            totalBookings: realRooms.reduce((acc, room) => acc + (room.bookingCount || 0), 0),
-            totalReviews,
-            averageReviewRating: averageReviewRating || 4.8
+            activeRooms: realRooms.filter(room => room.available).length,
+            totalBookings: realRooms.reduce((acc, room) => acc + (room.bookingCount || 0), 0)
           }
           setStats(realStats)
           
           console.log(`✅ ${realRooms.length} chambres DB récupérées avec ${allImages.length} images [msylla01]`)
           console.log('📊 Stats réelles calculées [msylla01]:', realStats)
+          
+          // Démarrer le carrousel d'images
+          if (allImages.length > 0) {
+            const interval = setInterval(() => {
+              setCurrentImageIndex((prev) => (prev + 1) % allImages.length)
+            }, 5000) // Change toutes les 5 secondes
+            
+            // Nettoyer l'interval au démontage
+            return () => clearInterval(interval)
+          }
           
         } else {
           throw new Error('Pas de données chambres DB')
@@ -147,65 +117,11 @@ export default function Home() {
         totalRooms: fallbackRooms.length,
         averageRating: 4.6,
         activeRooms: fallbackRooms.length,
-        totalBookings: 150,
-        totalReviews: 89,
-        averageReviewRating: 4.7
+        totalBookings: 150
       })
       console.log('🔄 Utilisation données fallback [msylla01]')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchRecentReviews = async () => {
-    try {
-      setReviewsLoading(true)
-      console.log('⭐ Récupération avis récents [msylla01] - 2025-10-03 16:33:47')
-      
-      const response = await fetch('http://localhost:5000/api/reviews?limit=6&sortBy=createdAt&order=desc')
-      const data = await response.json()
-      
-      if (data.success) {
-        setRecentReviews(data.reviews)
-        console.log(`✅ ${data.reviews.length} avis récents récupérés [msylla01]`)
-      }
-    } catch (error) {
-      console.error('❌ Erreur récupération avis récents [msylla01]:', error)
-      // Fallback avec avis fictifs
-      setRecentReviews([
-        {
-          id: '1',
-          rating: 5,
-          title: 'Séjour exceptionnel !',
-          comment: 'Service impeccable et chambres magnifiques. Je recommande vivement.',
-          verified: true,
-          user: { firstName: 'Marie', lastName: 'Dubois' },
-          room: { name: 'Suite Deluxe', type: 'DELUXE' },
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '2',
-          rating: 4,
-          title: 'Parfait pour les affaires',
-          comment: 'Hôtel idéal pour un voyage d\'affaires. Calme et bien situé.',
-          verified: true,
-          user: { firstName: 'Jean-Pierre', lastName: 'Martin' },
-          room: { name: 'Chambre Executive', type: 'SUITE' },
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: '3',
-          rating: 5,
-          title: 'Excellent rapport qualité-prix',
-          comment: 'Personnel très accueillant et petit-déjeuner délicieux.',
-          verified: false,
-          user: { firstName: 'Fatou', lastName: 'Diallo' },
-          room: { name: 'Chambre Familiale', type: 'FAMILY' },
-          createdAt: new Date().toISOString()
-        }
-      ])
-    } finally {
-      setReviewsLoading(false)
     }
   }
 
@@ -246,10 +162,9 @@ export default function Home() {
         price: 120,
         capacity: 1,
         averageRating: 4.2,
-        isActive: true,
+        available: true,
         images: getDefaultRoomImages('SINGLE'),
-        amenities: ['WiFi gratuit', 'TV écran plat', 'Climatisation', 'Coffre-fort'],
-        reviewStats: { totalReviews: 23, averageRating: '4.2', verifiedReviews: 15 }
+        amenities: ['WiFi gratuit', 'TV écran plat', 'Climatisation', 'Coffre-fort']
       },
       {
         id: 'room_2',
@@ -259,10 +174,9 @@ export default function Home() {
         price: 180,
         capacity: 2,
         averageRating: 4.5,
-        isActive: true,
+        available: true,
         images: getDefaultRoomImages('DOUBLE'),
-        amenities: ['WiFi gratuit', 'TV écran plat', 'Balcon privé', 'Minibar'],
-        reviewStats: { totalReviews: 41, averageRating: '4.5', verifiedReviews: 28 }
+        amenities: ['WiFi gratuit', 'TV écran plat', 'Balcon privé', 'Minibar']
       },
       {
         id: 'room_3',
@@ -272,10 +186,9 @@ export default function Home() {
         price: 350,
         capacity: 2,
         averageRating: 4.8,
-        isActive: true,
+        available: true,
         images: getDefaultRoomImages('SUITE'),
-        amenities: ['WiFi gratuit', 'Salon séparé', 'Bureau', 'Service butler'],
-        reviewStats: { totalReviews: 17, averageRating: '4.8', verifiedReviews: 14 }
+        amenities: ['WiFi gratuit', 'Salon séparé', 'Bureau', 'Service butler']
       },
       {
         id: 'room_4',
@@ -285,10 +198,21 @@ export default function Home() {
         price: 250,
         capacity: 4,
         averageRating: 4.6,
-        isActive: true,
+        available: true,
         images: getDefaultRoomImages('FAMILY'),
-        amenities: ['WiFi gratuit', 'Lits superposés', 'Coin jeux', 'Console'],
-        reviewStats: { totalReviews: 8, averageRating: '4.6', verifiedReviews: 6 }
+        amenities: ['WiFi gratuit', 'Lits superposés', 'Coin jeux', 'Console']
+      },
+      {
+        id: 'room_5',
+        name: 'Suite Présidentielle Deluxe',
+        description: 'Notre suite la plus luxueuse avec jacuzzi privé et terrasse.',
+        type: 'DELUXE',
+        price: 450,
+        capacity: 2,
+        averageRating: 4.9,
+        available: true,
+        images: getDefaultRoomImages('DELUXE'),
+        amenities: ['WiFi gratuit', 'Jacuzzi privé', 'Terrasse', 'Service VIP']
       }
     ]
   }
@@ -327,21 +251,6 @@ export default function Home() {
     return labels[type] || type
   }
 
-  const renderStars = (rating) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <span key={i} className={`text-yellow-400 ${i < rating ? '' : 'opacity-30'}`}>
-        ⭐
-      </span>
-    ))
-  }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short'
-    })
-  }
-
   // Démarrer le carrousel d'images une fois les images chargées
   useEffect(() => {
     if (allRoomImages.length > 0) {
@@ -359,7 +268,7 @@ export default function Home() {
     <>
       <Head>
         <title>Hotel Luxe - Votre séjour de rêve vous attend</title>
-        <meta name="description" content="Découvrez Hotel Luxe, votre destination de choix pour un séjour d'exception. Chambres de luxe à Dakar avec avis clients vérifiés." />
+        <meta name="description" content="Découvrez Hotel Luxe, votre destination de choix pour un séjour d'exception. Chambres de luxe à Dakar." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -500,15 +409,15 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Statistiques réelles avec reviews */}
+        {/* Statistiques réelles */}
         <section className="py-12 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Nos Chiffres en Temps Réel</h2>
-              <p className="text-gray-600">Données directement depuis notre base Prisma PostgreSQL</p>
+              <p className="text-gray-600">Données directement depuis notre base PostgreSQL</p>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
               <div className="p-6">
                 <div className="text-4xl font-bold text-blue-600 mb-2">{stats.totalRooms}</div>
                 <div className="text-gray-600">Chambres disponibles</div>
@@ -516,8 +425,6 @@ export default function Home() {
               </div>
               <div className="p-6">
                 <div className="text-4xl font-bold text-green-600 mb-2">{stats.averageRating.toFixed(1)}</div>
-                <div className="text-gray-600">Note chambres</div>
-                <div className="text-xs text-gray-500 mt-1">⭐ Moyenne générale</div>
               </div>
               <div className="p-6">
                 <div className="text-4xl font-bold text-purple-600 mb-2">{stats.activeRooms}</div>
@@ -525,282 +432,10 @@ export default function Home() {
                 <div className="text-xs text-gray-500 mt-1">✅ Disponibles</div>
               </div>
               <div className="p-6">
-                <div className="text-4xl font-bold text-orange-600 mb-2">{stats.totalReviews}</div>
-                <div className="text-gray-600">Avis clients</div>
-                <div className="text-xs text-gray-500 mt-1">📝 Total avis</div>
+                <div className="text-4xl font-bold text-orange-600 mb-2">{allRoomImages.length}</div>
+                <div className="text-gray-600">Images chambres</div>
+                <div className="text-xs text-gray-500 mt-1">📸 Carrousel actuel</div>
               </div>
-              <div className="p-6">
-                <div className="text-4xl font-bold text-red-600 mb-2">{stats.averageReviewRating.toFixed(1)}</div>
-                <div className="text-gray-600">Note avis</div>
-                <div className="text-xs text-gray-500 mt-1">⭐ Moyenne avis</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Chambres Section avec reviews */}
-        <section className="py-16 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Nos Chambres d'Exception
-              </h2>
-              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                {stats.totalRooms} chambres uniques avec {stats.totalReviews} avis clients vérifiés
-              </p>
-              <div className="mt-4 text-sm text-gray-500">
-                🗄️ Données DB en temps réel • ⭐ {stats.totalReviews} avis • 📸 {allRoomImages.length} images
-              </div>
-            </div>
-            
-            {loading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Chargement des chambres depuis Prisma PostgreSQL...</p>
-                <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 16:33:47</p>
-              </div>
-            ) : rooms.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {rooms.slice(0, 6).map((room, index) => (
-                  <div
-                    key={room.id}
-                    className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
-                  >
-                    {/* Image de la chambre */}
-                    <div className="relative h-48 overflow-hidden">
-                      <img
-                        src={room.images && room.images[0] ? room.images[0] : getDefaultRoomImages(room.type)[0]}
-                        alt={room.name}
-                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onError={(e) => {
-                          e.target.src = getDefaultRoomImages(room.type)[0]
-                        }}
-                      />
-                      
-                      {/* Badge type */}
-                      <div className="absolute top-3 left-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          room.type === 'SINGLE' ? 'bg-green-100 text-green-800' :
-                          room.type === 'DOUBLE' ? 'bg-blue-100 text-blue-800' :
-                          room.type === 'SUITE' ? 'bg-purple-100 text-purple-800' :
-                          room.type === 'FAMILY' ? 'bg-orange-100 text-orange-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {getTypeLabel(room.type)}
-                        </span>
-                      </div>
-
-                      {/* Note et avis */}
-                      <div className="absolute top-3 right-3 bg-white bg-opacity-90 backdrop-blur-sm rounded-full px-3 py-1">
-                        <div className="flex items-center space-x-1">
-                          <span className="text-yellow-400">⭐</span>
-                          <span className="text-sm font-medium">
-                            {room.reviewStats?.averageRating || (room.averageRating || room.rating || 4.8).toFixed(1)}
-                          </span>
-                          {room.reviewStats?.totalReviews && (
-                            <span className="text-xs text-gray-500">
-                              ({room.reviewStats.totalReviews})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Disponibilité */}
-                      {(room.isActive !== false) && (
-                        <div className="absolute bottom-3 left-3 bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">
-                          ✅ Disponible
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xl font-semibold text-gray-900">{room.name}</h3>
-                        <div className="flex items-center text-sm text-gray-500">
-                          <span>👥</span>
-                          <span className="ml-1">{room.capacity} pers.</span>
-                        </div>
-                      </div>
-                      
-                      <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
-                        {room.description || 'Chambre confortable et élégante'}
-                      </p>
-                      
-                      {/* Avis section */}
-                      {room.reviewStats && room.reviewStats.totalReviews > 0 && (
-                        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <div className="flex">
-                                {renderStars(Math.round(parseFloat(room.reviewStats.averageRating)))}
-                              </div>
-                              <span className="text-sm font-medium text-blue-800">
-                                {room.reviewStats.averageRating}/5
-                              </span>
-                            </div>
-                            <div className="text-sm text-blue-600">
-                              {room.reviewStats.totalReviews} avis
-                              {room.reviewStats.verifiedReviews > 0 && (
-                                <span className="ml-1">• ✅ {room.reviewStats.verifiedReviews} vérifiés</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {room.price}€
-                          <span className="text-sm text-gray-500 font-normal">/nuit</span>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">Surface</div>
-                          <div className="text-sm font-medium text-gray-700">{room.size || 25}m²</div>
-                        </div>
-                      </div>
-                      
-                      {/* Équipements depuis DB */}
-                      <div className="flex flex-wrap gap-1 mb-4">
-                        {room.amenities ? room.amenities.slice(0, 3).map((amenity, idx) => (
-                          <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                            {amenity.length > 15 ? amenity.slice(0, 15) + '...' : amenity}
-                          </span>
-                        )) : (
-                          <>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">WiFi gratuit</span>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">TV écran plat</span>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Climatisation</span>
-                          </>
-                        )}
-                      </div>
-                      
-                      <Link
-                        href={`/rooms/${room.id}`}
-                        className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium"
-                      >
-                        <span>Voir détails & Avis</span>
-                        <span>→</span>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-6xl mb-4">🏨</div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Aucune chambre trouvée
-                </h3>
-                <p className="text-gray-600">
-                  Problème de connexion à la base de données
-                </p>
-                <button
-                  onClick={fetchRealDataFromDB}
-                  className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Réessayer
-                </button>
-              </div>
-            )}
-            
-            <div className="text-center mt-12">
-              <Link
-                href="/rooms"
-                className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-              >
-                Voir toutes nos chambres ({stats.totalRooms})
-                <span className="ml-2">→</span>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Section Avis Clients Récents */}
-        <section className="py-16 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                ⭐ Avis Clients Récents
-              </h2>
-              <p className="text-xl text-gray-600">
-                Découvrez les derniers avis de nos clients • {stats.totalReviews} avis au total
-              </p>
-            </div>
-            
-            {reviewsLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Chargement des avis récents...</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {recentReviews.slice(0, 3).map((review, index) => (
-                  <div key={review.id} className="bg-gray-50 p-6 rounded-xl hover:shadow-lg transition-shadow">
-                    {/* En-tête avis */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                          {review.user.firstName[0]}{review.user.lastName[0]}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-900">
-                            {review.user.firstName} {review.user.lastName}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {formatDate(review.createdAt)}
-                          </div>
-                        </div>
-                      </div>
-                      {review.verified && (
-                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                          ✅ Vérifié
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Note */}
-                    <div className="flex items-center mb-3">
-                      <div className="flex mr-2">
-                        {renderStars(review.rating)}
-                      </div>
-                      <span className="text-sm text-gray-600">({review.rating}/5)</span>
-                    </div>
-
-                    {/* Titre et commentaire */}
-                    {review.title && (
-                      <h4 className="font-semibold text-gray-900 mb-2">{review.title}</h4>
-                    )}
-                    <p className="text-gray-700 mb-4 line-clamp-3">
-                      {review.comment}
-                    </p>
-
-                    {/* Chambre */}
-                    <div className="text-sm text-gray-600 bg-white p-2 rounded flex items-center justify-between">
-                      <span>🏨 {review.room.name}</span>
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        review.room.type === 'SINGLE' ? 'bg-green-100 text-green-800' :
-                        review.room.type === 'DOUBLE' ? 'bg-blue-100 text-blue-800' :
-                        review.room.type === 'SUITE' ? 'bg-purple-100 text-purple-800' :
-                        review.room.type === 'FAMILY' ? 'bg-orange-100 text-orange-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {getTypeLabel(review.room.type)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Lien vers tous les avis */}
-            <div className="text-center mt-8">
-              <Link
-                href="/rooms"
-                className="inline-flex items-center text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Voir tous les avis sur nos chambres
-                <span className="ml-2">→</span>
-              </Link>
             </div>
           </div>
         </section>
@@ -839,6 +474,196 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Chambres Section avec vraies données DB */}
+        <section className="py-16 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Nos Chambres d'Exception
+              </h2>
+              <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+                {stats.totalRooms} chambres uniques directement depuis notre base de données PostgreSQL
+              </p>
+              <div className="mt-4 text-sm text-gray-500">
+              </div>
+            </div>
+            
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Chargement des chambres depuis PostgreSQL...</p>
+                <p className="text-xs text-gray-500 mt-2">msylla01 • 2025-10-03 10:47:18</p>
+              </div>
+            ) : rooms.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {rooms.slice(0, 6).map((room, index) => (
+                  <div
+                    key={room.id}
+                    className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                  >
+                    {/* Image de la chambre */}
+                    <div className="relative h-48 overflow-hidden">
+                      <img
+                        src={room.images && room.images[0] ? room.images[0] : getDefaultRoomImages(room.type)[0]}
+                        alt={room.name}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                        onError={(e) => {
+                          e.target.src = getDefaultRoomImages(room.type)[0]
+                        }}
+                      />
+                      
+                      {/* Badge type */}
+                      <div className="absolute top-3 left-3">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          room.type === 'SINGLE' ? 'bg-green-100 text-green-800' :
+                          room.type === 'DOUBLE' ? 'bg-blue-100 text-blue-800' :
+                          room.type === 'SUITE' ? 'bg-purple-100 text-purple-800' :
+                          room.type === 'FAMILY' ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {getTypeLabel(room.type)}
+                        </span>
+                      </div>
+
+                      <div className="absolute top-3 right-3 bg-white bg-opacity-90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center space-x-1">
+                        <span className="text-yellow-400">⭐</span>
+                        <span className="text-sm font-medium">
+                          {(room.averageRating || room.rating || 4.8).toFixed(1)}
+                        </span>
+                      </div>
+
+                      {/* Disponibilité */}
+                      {room.available && (
+                        <div className="absolute bottom-3 left-3 bg-green-500 text-white px-2 py-1 rounded text-xs font-medium">
+                          ✅ Disponible
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="p-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xl font-semibold text-gray-900">{room.name}</h3>
+                        <div className="flex items-center text-sm text-gray-500">
+                          <span>👥</span>
+                          <span className="ml-1">{room.capacity} pers.</span>
+                        </div>
+                      </div>
+                      
+                      <p className="text-gray-600 mb-4 line-clamp-2 text-sm">
+                        {room.description || 'Chambre confortable et élégante'}
+                      </p>
+                      
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {room.price}€
+                          <span className="text-sm text-gray-500 font-normal">/nuit</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500">Surface</div>
+                          <div className="text-sm font-medium text-gray-700">{room.size || 25}m²</div>
+                        </div>
+                      </div>
+                      
+                      {/* Équipements depuis DB */}
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {room.amenities ? room.amenities.slice(0, 3).map((amenity, idx) => (
+                          <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            {amenity.length > 15 ? amenity.slice(0, 15) + '...' : amenity}
+                          </span>
+                        )) : (
+                          <>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">WiFi gratuit</span>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">TV écran plat</span>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">Climatisation</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      <Link
+                        href={`/rooms/${room.id}`}
+                        className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 font-medium"
+                      >
+                        <span>Voir détails & Réserver</span>
+                        <span>→</span>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl mb-4">🏨</div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Aucune chambre trouvée
+                </h3>
+                <p className="text-gray-600">
+                  Problème de connexion à la base de données
+                </p>
+                <button
+                  onClick={fetchRealDataFromDB}
+                  className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Réessayer
+                </button>
+              </div>
+            )}
+            
+            <div className="text-center mt-12">
+              <Link
+                href="/rooms"
+                className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                Voir toutes nos chambres ({stats.totalRooms})
+                <span className="ml-2">→</span>
+              </Link>
+            </div>
+          </div>
+        </section>
+        {/* Témoignages rapides */}
+        <section className="py-16 bg-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                Ce que disent nos clients
+              </h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="flex items-center mb-4">
+                  <span className="text-yellow-400">⭐⭐⭐⭐⭐</span>
+                </div>
+                <p className="text-gray-700 mb-4">
+                  "Séjour exceptionnel ! Service impeccable et chambres magnifiques. Je recommande vivement."
+                </p>
+                <div className="font-semibold text-gray-900">Marie Dubois</div>
+                <div className="text-sm text-gray-600">Cliente depuis 2023</div>
+              </div>
+              
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="flex items-center mb-4">
+                  <span className="text-yellow-400">⭐⭐⭐⭐⭐</span>
+                </div>
+                <p className="text-gray-700 mb-4">
+                  "L'hôtel parfait pour un séjour d'affaires. Calme, confortable et très bien situé."
+                </p>
+                <div className="font-semibold text-gray-900">Jean-Pierre Martin</div>
+                <div className="text-sm text-gray-600">Voyage d'affaires</div>
+              </div>
+              
+              <div className="bg-gray-50 p-6 rounded-xl">
+                <div className="flex items-center mb-4">
+                  <span className="text-yellow-400">⭐⭐⭐⭐⭐</span>
+                </div>
+                <p className="text-gray-700 mb-4">
+                  "Excellent rapport qualité-prix. Personnel très accueillant et petit-déjeuner délicieux."
+                </p>
+                <div className="font-semibold text-gray-900">Fatou Diallo</div>
+                <div className="text-sm text-gray-600">Séjour en famille</div>
+              </div>
+            </div>
+          </div>
+        </section>
         {/* Footer */}
         <footer className="bg-gray-900 text-white py-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -852,15 +677,14 @@ export default function Home() {
                 </div>
                 <p className="text-gray-400 mb-4">
                   Votre destination de choix pour un séjour d'exception à Dakar. 
-                  {stats.totalRooms} chambres uniques avec {stats.totalReviews} avis clients vérifiés.
+                  {stats.totalRooms} chambres uniques avec données en temps réel.
                 </p>
                 <div className="flex space-x-4 text-sm">
-                  <span className="bg-blue-600 px-2 py-1 rounded">🗄️ Prisma</span>
+                  <span className="bg-blue-600 px-2 py-1 rounded">🗄️ PostgreSQL</span>
                   <span className="bg-green-600 px-2 py-1 rounded">📸 {allRoomImages.length} images</span>
-                  <span className="bg-purple-600 px-2 py-1 rounded">⭐ {stats.totalReviews} avis</span>
                 </div>
                 <p className="text-sm text-gray-500 mt-4">
-                  Développé par msylla01 • 2025-10-03 16:33:47 UTC
+                  Développé par msylla01 • 2025-10-03 10:47:18 UTC
                 </p>
               </div>
               
@@ -901,7 +725,7 @@ export default function Home() {
             <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
               <p>&copy; 2025 Hotel Luxe Dakar. Tous droits réservés. Développé avec ❤️ par msylla01</p>
               <p className="text-xs mt-2">
-                Données Prisma PostgreSQL en temps réel • {allRoomImages.length} images • {stats.totalReviews} avis clients • Service 24h/24
+                Données PostgreSQL en temps réel • {allRoomImages.length} images chambres • Service 24h/24
               </p>
             </div>
           </div>

@@ -38,6 +38,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/rooms', require('./routes/rooms'));
 app.use('/api/bookings', require('./routes/bookings'));
+app.use("/api/reviews", require("./routes/reviews"));
 
 // Route par défaut
 app.get('/', (req, res) => {
