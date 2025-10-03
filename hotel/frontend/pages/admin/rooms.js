@@ -4,12 +4,18 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { 
-  PlusIcon,
   HomeIcon,
+  PlusIcon,
   PencilIcon,
-  TrashIcon,
   EyeIcon,
-  FunnelIcon
+  TrashIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ArrowLeftIcon,
+  StarIcon,
+  CurrencyEuroIcon,
+  UsersIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
 
 export default function AdminRooms() {
@@ -17,10 +23,7 @@ export default function AdminRooms() {
   const [user, setUser] = useState(null)
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
-    type: '',
-    status: 'all'
-  })
+  const [stats, setStats] = useState({})
 
   useEffect(() => {
     // Vérifier l'authentification admin
@@ -45,53 +48,135 @@ export default function AdminRooms() {
   const fetchRooms = async () => {
     try {
       setLoading(true)
-      const response = await fetch('http://localhost:5000/api/rooms')
-      const data = await response.json()
       
-      if (data.success) {
-        setRooms(data.rooms || [])
+      const response = await fetch('http://localhost:5000/api/rooms')
+      
+      if (response.ok) {
+        const data = await response.json()
+        const rooms = data.rooms || []
+        
+        // Récupérer les stats reviews pour chaque chambre
+        const roomsWithStats = await Promise.all(
+          rooms.map(async (room) => {
+            try {
+              const reviewsResponse = await fetch(`http://localhost:5000/api/reviews/room/${room.id}/stats`)
+              const reviewsData = await reviewsResponse.json()
+              
+              return {
+                ...room,
+                reviewStats: reviewsData.success ? reviewsData.stats : {
+                  totalReviews: 0,
+                  averageRating: '0.0',
+                  verifiedReviews: 0
+                }
+              }
+            } catch (error) {
+              return {
+                ...room,
+                reviewStats: {
+                  totalReviews: 0,
+                  averageRating: '0.0',
+                  verifiedReviews: 0
+                }
+              }
+            }
+          })
+        )
+        
+        setRooms(roomsWithStats)
+        
+        // Calculer les stats
+        const statsData = {
+          total: rooms.length,
+          active: rooms.filter(r => r.isActive !== false).length,
+          inactive: rooms.filter(r => r.isActive === false).length,
+          totalRevenue: rooms.reduce((sum, r) => sum + (r.price * 30), 0), // Estimation mensuelle
+          averagePrice: rooms.length > 0 ? rooms.reduce((sum, r) => sum + r.price, 0) / rooms.length : 0,
+          totalReviews: roomsWithStats.reduce((sum, r) => sum + (r.reviewStats.totalReviews || 0), 0)
+        }
+        setStats(statsData)
+        
+        console.log(`✅ ${rooms.length} chambres chargées [msylla01] - 2025-10-03 17:51:35`)
       }
     } catch (error) {
-      console.error('Erreur chargement chambres:', error)
+      console.error('❌ Erreur chargement chambres [msylla01]:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const getRoomTypeLabel = (type) => {
-    const types = {
+  const toggleRoomStatus = async (roomId, currentStatus) => {
+    try {
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch(`http://localhost:5000/api/rooms/${roomId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isActive: !currentStatus })
+      })
+
+      if (response.ok) {
+        setRooms(rooms.map(r => 
+          r.id === roomId ? { ...r, isActive: !currentStatus } : r
+        ))
+        alert(`✅ Chambre ${!currentStatus ? 'activée' : 'désactivée'} avec succès`)
+      } else {
+        alert('❌ Erreur lors de la modification')
+      }
+    } catch (error) {
+      console.error('❌ Erreur modification statut [msylla01]:', error)
+      alert('❌ Erreur de connexion')
+    }
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(amount)
+  }
+
+  const getTypeColor = (type) => {
+    const colors = {
+      'SINGLE': 'bg-green-100 text-green-800',
+      'DOUBLE': 'bg-blue-100 text-blue-800',
+      'SUITE': 'bg-purple-100 text-purple-800',
+      'FAMILY': 'bg-orange-100 text-orange-800',
+      'DELUXE': 'bg-red-100 text-red-800'
+    }
+    return colors[type] || 'bg-gray-100 text-gray-800'
+  }
+
+  const getTypeLabel = (type) => {
+    const labels = {
       'SINGLE': 'Simple',
       'DOUBLE': 'Double',
       'SUITE': 'Suite',
       'FAMILY': 'Familiale',
       'DELUXE': 'Deluxe'
     }
-    return types[type] || type
+    return labels[type] || type
   }
 
-  const getStatusBadge = (isActive) => {
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-        isActive 
-          ? 'bg-green-100 text-green-800' 
-          : 'bg-red-100 text-red-800'
-      }`}>
-        {isActive ? 'Active' : 'Inactive'}
-      </span>
-    )
+  const renderStars = (rating) => {
+    const numRating = parseFloat(rating) || 0
+    return Array.from({ length: 5 }, (_, i) => (
+      <StarIcon
+        key={i}
+        className={`w-4 h-4 ${i < numRating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+      />
+    ))
   }
-
-  const filteredRooms = rooms.filter(room => {
-    if (filters.type && room.type !== filters.type) return false
-    if (filters.status === 'active' && !room.isActive) return false
-    if (filters.status === 'inactive' && room.isActive) return false
-    return true
-  })
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement des chambres...</p>
+        </div>
       </div>
     )
   }
@@ -99,223 +184,251 @@ export default function AdminRooms() {
   return (
     <>
       <Head>
-        <title>Gestion des Chambres - Admin Hotel Luxe</title>
-        <meta name="description" content="Interface d'administration pour la gestion des chambres" />
+        <title>Gestion Chambres - Admin Hotel Luxe</title>
+        <meta name="description" content="Gestion des chambres - Dashboard administrateur" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
-        {/* Header Admin */}
+        {/* Header */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center py-4">
               <div className="flex items-center space-x-4">
-                <Link href="/admin" className="flex items-center space-x-2">
-                  <div className="w-10 h-10 bg-gradient-to-br from-red-600 to-red-800 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-lg">A</span>
-                  </div>
-                  <span className="text-xl font-bold text-gray-900">Admin Panel</span>
+                <Link href="/admin" className="flex items-center text-gray-600 hover:text-red-600">
+                  <ArrowLeftIcon className="w-5 h-5 mr-2" />
+                  Dashboard Admin
                 </Link>
+                <div className="text-gray-300">•</div>
+                <h1 className="text-xl font-bold text-gray-900">Gestion Chambres</h1>
               </div>
 
-              <nav className="hidden md:flex items-center space-x-6">
-                <Link href="/admin" className="text-gray-600 hover:text-blue-600 transition-colors">
-                  Dashboard
-                </Link>
-                <span className="text-blue-600 font-medium">Chambres</span>
-                <Link href="/admin/bookings" className="text-gray-600 hover:text-blue-600 transition-colors">
-                  Réservations
-                </Link>
-              </nav>
-
               <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600">Admin: {user?.firstName}</span>
                 <Link
-                  href="/"
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  href="/admin/rooms/new"
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center space-x-2"
                 >
-                  Retour au site
+                  <PlusIcon className="w-5 h-5" />
+                  <span>Nouvelle Chambre</span>
                 </Link>
+                <span className="text-sm text-gray-600">
+                  👤 {user?.firstName}
+                </span>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* En-tête */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Gestion des Chambres
-              </h1>
-              <p className="text-gray-600 mt-1">
-                {filteredRooms.length} chambre{filteredRooms.length > 1 ? 's' : ''} • Dernière mise à jour: {new Date().toLocaleTimeString('fr-FR')}
-              </p>
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center">
+                <BuildingOfficeIcon className="w-8 h-8 text-blue-600" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold text-gray-900">{stats.total || 0}</p>
+                  <p className="text-gray-600 text-sm">Total Chambres</p>
+                </div>
+              </div>
             </div>
-            
-            <Link
-              href="/admin/rooms/new"
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <PlusIcon className="w-5 h-5" />
-              <span>Ajouter une chambre</span>
-            </Link>
-          </div>
 
-          {/* Filtres */}
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-            <div className="flex items-center space-x-4">
-              <FunnelIcon className="w-5 h-5 text-gray-400" />
-              
-              <select
-                value={filters.type}
-                onChange={(e) => setFilters({...filters, type: e.target.value})}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Tous les types</option>
-                <option value="SINGLE">Simple</option>
-                <option value="DOUBLE">Double</option>
-                <option value="SUITE">Suite</option>
-                <option value="FAMILY">Familiale</option>
-                <option value="DELUXE">Deluxe</option>
-              </select>
-              
-              <select
-                value={filters.status}
-                onChange={(e) => setFilters({...filters, status: e.target.value})}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">Tous les statuts</option>
-                <option value="active">Actives</option>
-                <option value="inactive">Inactives</option>
-              </select>
-              
-              <div className="flex-1"></div>
-              
-              <span className="text-sm text-gray-500">
-                {filteredRooms.length} résultat{filteredRooms.length > 1 ? 's' : ''}
-              </span>
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center">
+                <CheckCircleIcon className="w-8 h-8 text-green-600" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold text-gray-900">{stats.active || 0}</p>
+                  <p className="text-gray-600 text-sm">Actives</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center">
+                <CurrencyEuroIcon className="w-8 h-8 text-green-600" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold text-gray-900">{Math.round(stats.averagePrice || 0)}€</p>
+                  <p className="text-gray-600 text-sm">Prix Moyen</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center">
+                <StarIcon className="w-8 h-8 text-yellow-600" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold text-gray-900">{stats.totalReviews || 0}</p>
+                  <p className="text-gray-600 text-sm">Total Avis</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg p-6 shadow-sm">
+              <div className="flex items-center">
+                <CurrencyEuroIcon className="w-8 h-8 text-purple-600" />
+                <div className="ml-4">
+                  <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalRevenue || 0)}</p>
+                  <p className="text-gray-600 text-sm">Revenus Est. /mois</p>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Liste des chambres */}
-          {filteredRooms.length > 0 ? (
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Chambre
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Type
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Prix
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Capacité
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Statut
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredRooms.map((room, index) => (
-                      <motion.tr
-                        key={room.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                              <HomeIcon className="w-5 h-5 text-blue-600" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {room.name}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {room.size}m² • {room.amenities?.length || 0} équipements
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {getRoomTypeLabel(room.type)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <span className="font-semibold">{room.price}€</span>
-                          <span className="text-gray-500">/nuit</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {room.capacity} pers.
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {getStatusBadge(room.isActive)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <div className="flex items-center space-x-2">
-                            <Link
-                              href={`/rooms/${room.id}`}
-                              className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
-                              title="Voir"
-                            >
-                              <EyeIcon className="w-4 h-4" />
-                            </Link>
-                            <Link
-                              href={`/admin/rooms/${room.id}/edit`}
-                              className="text-yellow-600 hover:text-yellow-900 p-1 rounded hover:bg-yellow-50"
-                              title="Modifier"
-                            >
-                              <PencilIcon className="w-4 h-4" />
-                            </Link>
-                            <button
-                              className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
-                              title="Supprimer"
-                            >
-                              <TrashIcon className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Chambres ({rooms.length})
+              </h3>
+              <div className="text-sm text-gray-500">
+                Données mises à jour • 2025-10-03 17:51:35
               </div>
             </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-center py-12 bg-white rounded-lg shadow-sm"
-            >
-              <HomeIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Aucune chambre trouvée
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Commencez par ajouter votre première chambre.
-              </p>
-              <Link
-                href="/admin/rooms/new"
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center space-x-2"
-              >
-                <PlusIcon className="w-5 h-5" />
-                <span>Ajouter une chambre</span>
-              </Link>
-            </motion.div>
-          )}
+
+            {rooms.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+                {rooms.map((room) => (
+                  <motion.div
+                    key={room.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                  >
+                    {/* Image */}
+                    <div className="relative h-48 bg-gray-200">
+                      {room.images && room.images[0] ? (
+                        <img
+                          src={room.images[0]}
+                          alt={room.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-300">
+                          <HomeIcon className="w-16 h-16 text-gray-500" />
+                        </div>
+                      )}
+                      
+                      {/* Badges */}
+                      <div className="absolute top-3 left-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getTypeColor(room.type)}`}>
+                          {getTypeLabel(room.type)}
+                        </span>
+                      </div>
+
+                      <div className="absolute top-3 right-3">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          room.isActive !== false ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {room.isActive !== false ? '✅ Active' : '❌ Inactive'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Contenu */}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="text-lg font-semibold text-gray-900">{room.name}</h4>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-red-600">{formatCurrency(room.price)}</p>
+                          <p className="text-xs text-gray-500">par nuit</p>
+                        </div>
+                      </div>
+
+                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                        {room.description || 'Aucune description'}
+                      </p>
+
+                      {/* Stats */}
+                      <div className="flex items-center justify-between mb-3 text-sm">
+                        <div className="flex items-center space-x-1">
+                          <UsersIcon className="w-4 h-4 text-gray-400" />
+                          <span>{room.capacity} pers.</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <BuildingOfficeIcon className="w-4 h-4 text-gray-400" />
+                          <span>{room.size || 25}m²</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <StarIcon className="w-4 h-4 text-yellow-400" />
+                          <span>{room.reviewStats.totalReviews} avis</span>
+                        </div>
+                      </div>
+
+                      {/* Reviews */}
+                      {room.reviewStats.totalReviews > 0 && (
+                        <div className="mb-3 p-2 bg-yellow-50 rounded">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-1">
+                              <div className="flex">
+                                {renderStars(room.reviewStats.averageRating)}
+                              </div>
+                              <span className="text-sm font-medium">
+                                {room.reviewStats.averageRating}/5
+                              </span>
+                            </div>
+                            <span className="text-xs text-gray-600">
+                              {room.reviewStats.verifiedReviews} vérifiés
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => router.push(`/rooms/${room.id}`)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Voir détails"
+                          >
+                            <EyeIcon className="w-5 h-5" />
+                          </button>
+                          
+                          <button
+                            onClick={() => router.push(`/admin/rooms/${room.id}/edit`)}
+                            className="text-gray-600 hover:text-gray-800"
+                            title="Modifier"
+                          >
+                            <PencilIcon className="w-5 h-5" />
+                          </button>
+
+                          <button
+                            onClick={() => toggleRoomStatus(room.id, room.isActive !== false)}
+                            className={room.isActive !== false ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}
+                            title={room.isActive !== false ? 'Désactiver' : 'Activer'}
+                          >
+                            {room.isActive !== false ? <XCircleIcon className="w-5 h-5" /> : <CheckCircleIcon className="w-5 h-5" />}
+                          </button>
+                        </div>
+
+                        <div className="text-xs text-gray-500">
+                          ID: {room.id.slice(-8)}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <HomeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 mb-4">Aucune chambre trouvée</p>
+                <Link
+                  href="/admin/rooms/new"
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors inline-flex items-center space-x-2"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  <span>Ajouter une chambre</span>
+                </Link>
+              </div>
+            )}
+          </div>
+
+          {/* Footer info */}
+          <div className="mt-8 text-center text-gray-500 text-sm">
+            Gestion Chambres • Données Prisma PostgreSQL • msylla01 • 2025-10-03 17:51:35
+          </div>
         </main>
       </div>
     </>
