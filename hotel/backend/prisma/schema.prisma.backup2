@@ -1,0 +1,264 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  firstName         String?
+  lastName          String?
+  phone             String?   // NOUVEAU CHAMP
+  address           String?   // NOUVEAU CHAMP  
+  birthDate         DateTime? // NOUVEAU CHAMP
+  preferences       Json?     // NOUVEAU CHAMP pour stocker les préférences
+  role              Role      @default(CLIENT)
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  bookings          Booking[]
+  reviews           Review[]
+
+  @@map("users")
+}
+
+model Room {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  type            RoomType
+  price           Float
+  capacity        Int
+  size            Float?
+  images          String[]  @default([])
+  amenities       String[]  @default([])
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  bookings        Booking[]
+  reviews         Review[]
+
+  @@map("rooms")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  userId          String
+  roomId          String
+  checkIn         DateTime
+  checkOut        DateTime
+  guests          Int
+  totalAmount     Float
+  status          BookingStatus @default(PENDING)
+  specialRequests String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  payment         Payment[]
+  review          Review?       // NOUVEAU: Une réservation peut avoir un avis
+
+  @@map("bookings")
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String
+  amount          Float
+  currency        String        @default("EUR")
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  transactionId   String?
+  stripeId        String?
+  paypalId        String?
+  errorMessage    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Review {
+  id                 String    @id @default(cuid())
+  
+  // Relations de base
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  roomId             String  
+  room               Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  bookingId          String?   @unique // NOUVEAU: Lien vers réservation (optionnel)
+  booking            Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  
+  // Contenu de l'avis (AMÉLIORÉ)
+  rating             Int       // 1-5 étoiles
+  title              String?   // NOUVEAU: Titre de l'avis
+  comment            String?   // Commentaire principal
+  
+  // Détails supplémentaires (NOUVEAUX)
+  pros               String[]  @default([]) // Points positifs
+  cons               String[]  @default([]) // Points négatifs
+  recommendToFriends Boolean?  // Recommande à des amis
+  
+  // Métadonnées (AMÉLIORÉES)
+  verified           Boolean   @default(false) // NOUVEAU: Avis vérifié (via réservation)
+  helpful            Int       @default(0)     // NOUVEAU: Nombre de votes "utile"
+  isApproved         Boolean   @default(false) // Existant: Modération
+  
+  // Réponse de l'hôtel (NOUVEAUX)
+  response           String?   // Réponse de l'administration
+  responseDate       DateTime? // Date de la réponse
+  responseBy         String?   // ID de l'admin qui a répondu
+  
+  // Timestamps
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("reviews")
+  @@index([roomId])     // Index pour performances
+  @@index([userId])     // Index pour performances
+  @@index([rating])     // Index pour filtres
+  @@index([verified])   // Index pour avis vérifiés
+  @@index([createdAt])  // Index pour tri chronologique
+}
+
+// Enums existants
+enum Role {
+  CLIENT
+  ADMIN
+  STAFF
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  SUITE
+  FAMILY
+  DELUXE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  CHECKED_IN
+  CHECKED_OUT
+  COMPLETED
+}
+
+enum PaymentMethod {
+  STRIPE
+  PAYPAL
+  ORANGE_MONEY
+  WAVE
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+// Modèle pour les enregistrements gérant (séjours physiques)
+model ManagerBooking {
+  id                String   @id @default(cuid())
+  
+  // Type de séjour
+  type              BookingType // HOURLY, NIGHTLY, EXTENDED
+  
+  // Informations client (pour séjours prolongés)
+  clientFirstName   String?
+  clientLastName    String?
+  clientPhone       String?
+  clientIdType      String?  // CNI, PASSPORT, etc.
+  clientIdNumber    String?
+  
+  // Informations chambre
+  roomId            String
+  room              Room     @relation(fields: [roomId], references: [id])
+  
+  // Horaires
+  checkIn           DateTime
+  checkOut          DateTime
+  actualCheckOut    DateTime?
+  
+  // Durée et tarification
+  duration          Int      // en heures pour HOURLY, en jours pour autres
+  hourlyRate        Float?   // tarif horaire si applicable
+  totalAmount       Float
+  
+  // Statut
+  status            ManagerBookingStatus @default(ACTIVE)
+  
+  // Paiement
+  paymentMethod     String   @default("CASH")
+  paymentReceived   Boolean  @default(false)
+  
+  // Métadonnées
+  receiptNumber     String   @unique
+  notes             String?
+  
+  // Gérant responsable
+  managerId         String
+  manager           User     @relation(fields: [managerId], references: [id])
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("manager_bookings")
+}
+
+// Énumérations pour l'espace gérant
+enum BookingType {
+  HOURLY    // 1h à 5h
+  NIGHTLY   // 22h-12h lendemain
+  EXTENDED  // Plusieurs jours
+}
+
+enum ManagerBookingStatus {
+  ACTIVE        // En cours
+  COMPLETED     // Terminé
+  EXPIRED       // Dépassé
+  EXTENDED      // Prolongé
+  CANCELLED     // Annulé
+}
+
+// Ajouter la relation dans le modèle Room
+// Room {
+//   managerBookings ManagerBooking[]
+// }
+
+// Ajouter la relation dans le modèle User
+// User {
+//   managerBookings ManagerBooking[]
+// }
+
+// Extensions pour les relations espace gérant
+// Dans Room, ajouter:
+// managerBookings ManagerBooking[]
+
+// Dans User, ajouter:
+// managerBookings ManagerBooking[]

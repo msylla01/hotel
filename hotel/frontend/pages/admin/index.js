@@ -261,6 +261,9 @@ export default function AdminDashboard() {
                 </Link>
                 <Link href="/admin/revenue" className="text-gray-600 hover:text-red-600 transition-colors font-medium">
                   💰 Revenus & CA
+                <Link href="/manager" className="text-gray-600 hover:text-red-600 transition-colors font-medium">
+                  🏨 Espace Gérant
+                </Link>
                 </Link>
               </nav>
 
@@ -727,3 +730,36 @@ export default function AdminDashboard() {
   )
 }
 
+
+// Ajouter dans les actions rapides une carte pour l'espace gérant
+// Insérer après la carte "Statistiques" :
+/*
+              {
+                title: 'Espace Gérant',
+                description: 'Gestion séjours sur place',
+                icon: UserGroupIcon,
+                href: '/manager',
+                color: 'bg-teal-500 hover:bg-teal-600',
+                badge: 'PHYSIQUE'
+              },
+*/
+
+// Ajouter cette carte dans les actions rapides du dashboard admin
+/*
+AJOUTER CETTE CARTE DANS LA SECTION "Actions rapides" :
+
+              {
+                title: 'Espace Gérant',
+                description: 'Gestion séjours sur place',
+                icon: UserGroupIcon,
+                href: '/manager',
+                color: 'bg-teal-500 hover:bg-teal-600',
+                badge: '👨‍💼'
+              },
+
+ET DANS LA NAVIGATION HEADER :
+
+                <Link href="/manager" className="text-gray-600 hover:text-red-600 transition-colors font-medium">
+                  👨‍💼 Espace Gérant
+                </Link>
+*/
