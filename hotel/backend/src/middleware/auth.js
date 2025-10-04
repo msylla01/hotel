@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 const authenticateToken = async (req, res, next) => {
   try {
-    console.log('🔐 Vérification token [msylla01] - 2025-10-02 00:31:15');
+    console.log('🔐 Vérification token [msylla01] - 2025-10-04 01:27:33');
     
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
@@ -137,8 +137,57 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// NOUVEAU: Middleware pour vérifier les droits gérant/admin
+const managerAuth = async (req, res, next) => {
+  try {
+    console.log('🏨 Vérification droits gérant/admin [msylla01] - 2025-10-04 01:27:33');
+    
+    // D'abord authentifier avec le middleware existant
+    await authenticateToken(req, res, () => {
+      console.log('👤 Utilisateur authentifié:', {
+        email: req.user?.email,
+        role: req.user?.role,
+        isActive: req.user?.isActive
+      });
+
+      // Vérifier que c'est un MANAGER ou ADMIN
+      if (!req.user || !['ADMIN', 'MANAGER'].includes(req.user.role)) {
+        console.log('❌ Accès refusé - Rôle non autorisé:', req.user?.role);
+        return res.status(403).json({
+          success: false,
+          message: 'Accès réservé aux gérants et administrateurs',
+          userRole: req.user?.role,
+          requiredRoles: ['ADMIN', 'MANAGER'],
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Vérifier que le compte est actif
+      if (!req.user.isActive) {
+        console.log('❌ Compte inactif:', req.user.email);
+        return res.status(403).json({
+          success: false,
+          message: 'Compte gérant désactivé',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      console.log('✅ Accès gérant/admin autorisé pour:', req.user.email);
+      next();
+    });
+  } catch (error) {
+    console.error('❌ Erreur auth gérant [msylla01]:', error);
+    return res.status(401).json({
+      success: false,
+      message: 'Erreur authentification gérant',
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+
 module.exports = {
   authenticateToken,
   requireActiveAccount,
-  requireAdmin
+  requireAdmin,
+  managerAuth
 };

@@ -1,0 +1,618 @@
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { 
+  ArrowLeftIcon,
+  UserGroupIcon,
+  IdentificationIcon,
+  BanknotesIcon,
+  PrinterIcon,
+  CheckCircleIcon,
+  CalendarDaysIcon
+} from '@heroicons/react/24/outline'
+
+export default function ExtendedBooking() {
+  const router = useRouter()
+  const { roomId } = router.query
+  const [user, setUser] = useState(null)
+  const [rooms, setRooms] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(null)
+  const [formData, setFormData] = useState({
+    roomId: roomId || '',
+    checkIn: '',
+    checkOut: '',
+    clientFirstName: '',
+    clientLastName: '',
+    clientPhone: '',
+    clientIdType: 'CNI',
+    clientIdNumber: '',
+    notes: ''
+  })
+
+  useEffect(() => {
+    // Vérifier authentification gérant
+    const token = localStorage.getItem('hotel_token')
+    const userData = localStorage.getItem('hotel_user')
+    
+    if (!token || !userData) {
+      router.push('/auth/login')
+      return
+    }
+
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      const user = JSON.parse(userData)
+      if (user.role !== "MANAGER" && user.role !== "ADMIN") {
+        router.push('/dashboard')
+        return
+      }
+
+      setUser(user)
+      fetchAvailableRooms()
+
+      // Définir dates par défaut (aujourd'hui → demain)
+      const today = new Date()
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      setFormData(prev => ({
+        ...prev,
+        checkIn: today.toISOString().slice(0, 16),
+        checkOut: tomorrow.toISOString().slice(0, 16),
+        roomId: roomId || prev.roomId
+      }))
+    } catch (err) {
+      console.error('❌ Erreur auth gérant [msylla01]:', err)
+      router.push('/auth/login')
+    }
+  }, [router, roomId])
+
+  const fetchAvailableRooms = async () => {
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/manager/dashboard', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        const availableRooms = data.data.rooms.filter(room => !room.isOccupied)
+        setRooms(availableRooms)
+      }
+    } catch (error) {
+      console.error('❌ Erreur récupération chambres [msylla01]:', error)
+      // Fallback
+      setRooms([
+        { id: '1', name: 'Chambre 101', type: 'DOUBLE', price: 120, isOccupied: false },
+        { id: '2', name: 'Suite 201', type: 'SUITE', price: 250, isOccupied: false }
+      ])
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    // Validation
+    const requiredFields = ['roomId', 'checkIn', 'checkOut', 'clientFirstName', 'clientLastName', 'clientPhone', 'clientIdNumber']
+    for (const field of requiredFields) {
+      if (!formData[field]) {
+        setError('Veuillez remplir tous les champs obligatoires')
+        return
+      }
+    }
+
+    // Vérifier que check-out > check-in
+    if (new Date(formData.checkOut) <= new Date(formData.checkIn)) {
+      setError('La date de sortie doit être après la date d\'entrée')
+      return
+    }
+
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      setLoading(true)
+      setError('')
+
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/manager/booking/extended', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setSuccess(data)
+        console.log('✅ Réservation prolongée créée [msylla01]:', data.booking.id)
+      } else {
+        throw new Error(data.message || 'Erreur création réservation')
+      }
+    } catch (error) {
+      console.error('❌ Erreur création réservation prolongée [msylla01]:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getSelectedRoom = () => {
+    return rooms.find(r => r.id === formData.roomId)
+  }
+
+  const calculateDuration = () => {
+    if (!formData.checkIn || !formData.checkOut) return 0
+    
+    const checkIn = new Date(formData.checkIn)
+    const checkOut = new Date(formData.checkOut)
+    const diffTime = checkOut.getTime() - checkIn.getTime()
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  }
+
+  const calculateTotal = () => {
+    const room = getSelectedRoom()
+    if (!room) return 0
+    
+    const days = calculateDuration()
+    return (room.price || 120) * days
+  }
+
+  if (success) {
+    return (
+      <>
+        <Head>
+          <title>Séjour Prolongé Créé - Espace Gérant</title>
+        </Head>
+
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-lg p-8 max-w-lg w-full mx-4"
+          >
+            <div className="text-center mb-6">
+              <CheckCircleIcon className="w-16 h-16 text-purple-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Séjour Prolongé Enregistré !
+              </h2>
+              <p className="text-gray-600">
+                Réservation créée avec pièce d'identité
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded-lg">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Reçu N°:</span>
+                <span className="font-mono text-sm">{success.receipt.number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Client:</span>
+                <span className="font-medium">{success.receipt.client}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Téléphone:</span>
+                <span>{success.receipt.phone}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Pièce ID:</span>
+                <span className="font-mono text-xs">{success.receipt.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Chambre:</span>
+                <span className="font-medium">{success.receipt.room}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Durée:</span>
+                <span>{success.receipt.duration}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Période:</span>
+                <span className="text-xs">
+                  {success.receipt.checkIn} → {success.receipt.checkOut}
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-3">
+                <span className="font-bold">TOTAL:</span>
+                <span className="font-bold text-purple-600">{success.receipt.total}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  const receiptWindow = window.open('', '_blank')
+                  receiptWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>Reçu Séjour Prolongé - Hotel Luxe</title>
+                      <style>
+                        body { font-family: Arial, sans-serif; max-width: 350px; margin: 20px auto; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                        .row { display: flex; justify-content: space-between; margin: 5px 0; }
+                        .client { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+                        .total { border-top: 2px solid #000; padding-top: 10px; font-weight: bold; }
+                        .footer { text-align: center; margin-top: 15px; font-size: 12px; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="header">
+                        <h2>HOTEL LUXE</h2>
+                        <p>SÉJOUR PROLONGÉ</p>
+                        <p>Reçu N° ${success.receipt.number}</p>
+                      </div>
+                      
+                      <div class="client">
+                        <div class="row"><span>Client:</span><span>${success.receipt.client}</span></div>
+                        <div class="row"><span>Téléphone:</span><span>${success.receipt.phone}</span></div>
+                        <div class="row"><span>Pièce ID:</span><span>${success.receipt.id}</span></div>
+                      </div>
+                      
+                      <div class="row"><span>Chambre:</span><span>${success.receipt.room}</span></div>
+                      <div class="row"><span>Type:</span><span>${success.receipt.type}</span></div>
+                      <div class="row"><span>Durée:</span><span>${success.receipt.duration}</span></div>
+                      <div class="row"><span>Tarif:</span><span>${success.receipt.rate}</span></div>
+                      <div class="row"><span>Entrée:</span><span>${success.receipt.checkIn}</span></div>
+                      <div class="row"><span>Sortie:</span><span>${success.receipt.checkOut}</span></div>
+                      
+                      <div class="total">
+                        <div class="row"><span>TOTAL:</span><span>${success.receipt.total}</span></div>
+                      </div>
+                      
+                      <div class="footer">
+                        <p>Gérant: ${user?.firstName} ${user?.lastName}</p>
+                        <p>Merci de votre confiance !</p>
+                        <p>Hotel Luxe - 2025-10-03 23:16:23</p>
+                      </div>
+                    </body>
+                    </html>
+                  `)
+                  receiptWindow.document.close()
+                  receiptWindow.print()
+                }}
+                className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2"
+              >
+                <PrinterIcon className="w-5 h-5" />
+                <span>Imprimer Reçu Complet</span>
+              </button>
+              
+              <Link
+                href="/manager"
+                className="block w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-colors text-center"
+              >
+                Retour Dashboard
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Head>
+        <title>Séjour Prolongé - Espace Gérant</title>
+        <meta name="description" content="Créer une réservation prolongée avec pièce d'identité" />
+      </Head>
+
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <div className="flex items-center space-x-4">
+                <Link href="/manager" className="flex items-center text-gray-600 hover:text-purple-600 transition-colors">
+                  <ArrowLeftIcon className="w-5 h-5 mr-2" />
+                  Espace Gérant
+                </Link>
+                <div className="text-gray-300">•</div>
+                <h1 className="text-xl font-bold text-gray-900">Séjour Prolongé</h1>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-600">
+                  🏨 {user?.firstName} {user?.lastName}
+                </span>
+                <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Gérant</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl shadow-sm p-8"
+          >
+            {/* En-tête */}
+            <div className="flex items-center space-x-3 mb-8">
+              <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center">
+                <UserGroupIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Séjour Prolongé</h2>
+                <p className="text-gray-600">Plusieurs jours • Pièce d'identité obligatoire</p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-800">❌ {error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Informations client */}
+              <div className="border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <IdentificationIcon className="w-5 h-5 mr-2" />
+                  Informations Client *
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Prénom *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.clientFirstName}
+                      onChange={(e) => setFormData({ ...formData, clientFirstName: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.clientLastName}
+                      onChange={(e) => setFormData({ ...formData, clientLastName: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Téléphone *
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.clientPhone}
+                      onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
+                      placeholder="+221 77 123 45 67"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Type pièce d'identité *
+                    </label>
+                    <select
+                      value={formData.clientIdType}
+                      onChange={(e) => setFormData({ ...formData, clientIdType: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    >
+                      <option value="CNI">Carte Nationale d'Identité</option>
+                      <option value="PASSPORT">Passeport</option>
+                      <option value="PERMIS">Permis de Conduire</option>
+                    </select>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Numéro pièce d'identité *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.clientIdNumber}
+                      onChange={(e) => setFormData({ ...formData, clientIdNumber: e.target.value })}
+                      placeholder="Numéro de la pièce d'identité"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Réservation */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Chambre */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Chambre disponible *
+                  </label>
+                  <select
+                    value={formData.roomId}
+                    onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                    required
+                  >
+                    <option value="">Sélectionner une chambre</option>
+                    {rooms.map(room => (
+                      <option key={room.id} value={room.id}>
+                        {room.name} - {room.type} ({room.price || 120}€/jour)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dates */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date d'entrée *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.checkIn}
+                      onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date de sortie *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.checkOut}
+                      onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
+                      min={formData.checkIn}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Résumé */}
+              {formData.roomId && formData.checkIn && formData.checkOut && calculateDuration() > 0 && (
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-purple-900 mb-3">📋 Résumé du séjour prolongé</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Client:</span>
+                      <span className="font-medium">
+                        {formData.clientFirstName} {formData.clientLastName}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Pièce ID:</span>
+                      <span>{formData.clientIdType}: {formData.clientIdNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Chambre:</span>
+                      <span className="font-medium">
+                        {getSelectedRoom()?.name} ({getSelectedRoom()?.type})
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Entrée:</span>
+                      <span>{new Date(formData.checkIn).toLocaleString('fr-FR')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Sortie:</span>
+                      <span className="font-medium text-orange-600">
+                        {new Date(formData.checkOut).toLocaleString('fr-FR')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Durée:</span>
+                      <span>{calculateDuration()} jour(s)</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tarif:</span>
+                      <span>{getSelectedRoom()?.price || 120}€/jour</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-bold">TOTAL:</span>
+                      <span className="font-bold text-purple-600 text-lg">
+                        {calculateTotal()}€
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (optionnel)
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Notes particulières pour ce séjour prolongé..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+                />
+              </div>
+
+              {/* Boutons */}
+              <div className="flex space-x-4 pt-6 border-t">
+                <Link
+                  href="/manager"
+                  className="flex-1 border border-gray-300 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-50 transition-colors text-center"
+                >
+                  Annuler
+                </Link>
+                <button
+                  type="submit"
+                  disabled={loading || !formData.roomId || !formData.checkIn || !formData.checkOut || !formData.clientFirstName}
+                  className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Création...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BanknotesIcon className="w-5 h-5" />
+                      <span>Enregistrer Séjour</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+
+          {/* Info séjour prolongé */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-white rounded-lg shadow-sm p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Informations Séjour Prolongé</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <div className="font-semibold text-purple-900">Durée minimum</div>
+                <div className="text-lg font-bold text-purple-600">1 jour</div>
+              </div>
+              <div className="text-center p-4 bg-orange-50 rounded-lg">
+                <div className="font-semibold text-orange-900">Pièce d'identité</div>
+                <div className="text-lg font-bold text-orange-600">Obligatoire</div>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="font-semibold text-green-900">Tarification</div>
+                <div className="text-lg font-bold text-green-600">Prix × Nb jours</div>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-blue-800 text-sm">
+                <strong>ℹ️ Note:</strong> Pour les séjours prolongés, la pièce d'identité du client est obligatoire 
+                pour des raisons de sécurité et de traçabilité. Le reçu complet sera généré avec toutes les informations.
+              </p>
+            </div>
+          </motion.div>
+
+          {/* Footer info */}
+          <div className="mt-6 text-center text-gray-500 text-sm">
+            Séjour Prolongé • Espace Gérant • msylla01 • 2025-10-03 23:20:33
+          </div>
+        </main>
+      </div>
+    </>
+  )
+}

@@ -484,3 +484,78 @@ router.get('/verify', async (req, res) => {
 });
 
 module.exports = router;
+
+// Route temporaire pour créer un gérant (À SUPPRIMER EN PRODUCTION)
+router.post('/create-manager', async (req, res) => {
+  try {
+    console.log('👨‍💼 Création gérant via API [msylla01] - 2025-10-04 00:12:49');
+
+    // Vérifier si un gérant existe
+    const existingManager = await prisma.user.findFirst({
+      where: { role: 'MANAGER' }
+    });
+
+    if (existingManager) {
+      return res.json({
+        success: true,
+        message: 'Un gérant existe déjà',
+        manager: {
+          email: existingManager.email,
+          name: `${existingManager.firstName} ${existingManager.lastName}`
+        },
+        credentials: {
+          email: 'gerant@hotelluxe.com',
+          password: 'manager123'
+        }
+      });
+    }
+
+    // Hash du mot de passe
+    const hashedPassword = await bcrypt.hash('manager123', 10);
+
+    // Créer le gérant
+    const manager = await prisma.user.create({
+      data: {
+        email: 'gerant@hotelluxe.com',
+        password: hashedPassword,
+        firstName: 'Jean',
+        lastName: 'Dupont',
+        phone: '+221 77 123 45 67',
+        address: '123 Avenue des Hôtels, Dakar',
+        role: 'MANAGER',
+        isActive: true,
+        emailVerified: true
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Compte gérant créé avec succès',
+      manager: {
+        id: manager.id,
+        email: manager.email,
+        name: `${manager.firstName} ${manager.lastName}`,
+        role: manager.role
+      },
+      credentials: {
+        email: 'gerant@hotelluxe.com',
+        password: 'manager123'
+      },
+      access: {
+        dashboard: 'http://localhost:3000/manager',
+        hourly: 'http://localhost:3000/manager/booking/hourly',
+        nightly: 'http://localhost:3000/manager/booking/nightly',
+        extended: 'http://localhost:3000/manager/booking/extended',
+        reports: 'http://localhost:3000/manager/reports'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur création gérant [msylla01]:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur création gérant',
+      error: error.message
+    });
+  }
+});

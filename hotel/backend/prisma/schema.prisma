@@ -16,19 +16,23 @@ model User {
   password          String
   firstName         String?
   lastName          String?
-  phone             String?   // NOUVEAU CHAMP
-  address           String?   // NOUVEAU CHAMP  
-  birthDate         DateTime? // NOUVEAU CHAMP
-  preferences       Json?     // NOUVEAU CHAMP pour stocker les préférences
+  phone             String?
+  address           String?
+  birthDate         DateTime?
+  preferences       Json?
   role              Role      @default(CLIENT)
   isActive          Boolean   @default(true)
   emailVerified     Boolean   @default(false)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // Relations
+  // Relations existantes
   bookings          Booking[]
   reviews           Review[]
+  
+  // Relations espace gérant
+  managerBookings   ManagerBooking[]
+  managerLogs       ManagerActivityLog[]
 
   @@map("users")
 }
@@ -47,9 +51,12 @@ model Room {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  // Relations
+  // Relations existantes
   bookings        Booking[]
   reviews         Review[]
+  
+  // Relations espace gérant
+  managerBookings ManagerBooking[]
 
   @@map("rooms")
 }
@@ -71,7 +78,7 @@ model Booking {
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   room            Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
   payment         Payment[]
-  review          Review?       // NOUVEAU: Une réservation peut avoir un avis
+  review          Review?
 
   @@map("bookings")
 }
@@ -106,46 +113,137 @@ model Review {
   roomId             String  
   room               Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
   
-  bookingId          String?   @unique // NOUVEAU: Lien vers réservation (optionnel)
+  bookingId          String?   @unique
   booking            Booking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
   
-  // Contenu de l'avis (AMÉLIORÉ)
-  rating             Int       // 1-5 étoiles
-  title              String?   // NOUVEAU: Titre de l'avis
-  comment            String?   // Commentaire principal
+  // Contenu de l'avis
+  rating             Int
+  title              String?
+  comment            String?
   
-  // Détails supplémentaires (NOUVEAUX)
-  pros               String[]  @default([]) // Points positifs
-  cons               String[]  @default([]) // Points négatifs
-  recommendToFriends Boolean?  // Recommande à des amis
+  // Détails supplémentaires
+  pros               String[]  @default([])
+  cons               String[]  @default([])
+  recommendToFriends Boolean?
   
-  // Métadonnées (AMÉLIORÉES)
-  verified           Boolean   @default(false) // NOUVEAU: Avis vérifié (via réservation)
-  helpful            Int       @default(0)     // NOUVEAU: Nombre de votes "utile"
-  isApproved         Boolean   @default(false) // Existant: Modération
+  // Métadonnées
+  verified           Boolean   @default(false)
+  helpful            Int       @default(0)
+  isApproved         Boolean   @default(false)
   
-  // Réponse de l'hôtel (NOUVEAUX)
-  response           String?   // Réponse de l'administration
-  responseDate       DateTime? // Date de la réponse
-  responseBy         String?   // ID de l'admin qui a répondu
+  // Réponse de l'hôtel
+  response           String?
+  responseDate       DateTime?
+  responseBy         String?
   
   // Timestamps
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   @@map("reviews")
-  @@index([roomId])     // Index pour performances
-  @@index([userId])     // Index pour performances
-  @@index([rating])     // Index pour filtres
-  @@index([verified])   // Index pour avis vérifiés
-  @@index([createdAt])  // Index pour tri chronologique
+  @@index([roomId])
+  @@index([userId])
+  @@index([rating])
+  @@index([verified])
+  @@index([createdAt])
 }
 
-// Enums existants
+// NOUVEAU MODÈLE: Espace Gérant - Réservations physiques sur place
+model ManagerBooking {
+  id                String   @id @default(cuid())
+  
+  // Type de séjour
+  type              ManagerBookingType
+  
+  // Informations client (obligatoires pour séjours prolongés)
+  clientFirstName   String?
+  clientLastName    String?
+  clientPhone       String?
+  clientIdType      String?
+  clientIdNumber    String?
+  
+  // Informations chambre
+  roomId            String
+  room              Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  // Horaires
+  checkIn           DateTime
+  checkOut          DateTime
+  actualCheckOut    DateTime?
+  
+  // Durée et tarification
+  duration          Int
+  hourlyRate        Float?
+  totalAmount       Float
+  
+  // Statut et paiement
+  status            ManagerBookingStatus @default(ACTIVE)
+  paymentMethod     String   @default("CASH")
+  paymentReceived   Boolean  @default(true)
+  
+  // Métadonnées
+  receiptNumber     String   @unique
+  notes             String?
+  
+  // Suivi dépassements
+  isExpired         Boolean  @default(false)
+  overtimeMinutes   Int?
+  overtimeCharge    Float?
+  
+  // Gérant responsable
+  managerId         String
+  manager           User     @relation(fields: [managerId], references: [id], onDelete: Restrict)
+  
+  // Relations
+  activityLogs      ManagerActivityLog[]
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("manager_bookings")
+  @@index([roomId])
+  @@index([status])
+  @@index([type])
+  @@index([managerId])
+  @@index([createdAt])
+  @@index([checkOut])
+}
+
+// NOUVEAU MODÈLE: Log d'activité espace gérant
+model ManagerActivityLog {
+  id          String   @id @default(cuid())
+  
+  // Type d'activité
+  action      ManagerAction
+  
+  // Référence réservation
+  bookingId   String?
+  booking     ManagerBooking? @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  
+  // Détails
+  description String
+  details     Json?
+  
+  // Gérant responsable
+  managerId   String
+  manager     User     @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+
+  @@map("manager_activity_logs")
+  @@index([managerId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// Enums existants étendus
 enum Role {
   CLIENT
   ADMIN
   STAFF
+  MANAGER
 }
 
 enum RoomType {
@@ -179,4 +277,29 @@ enum PaymentStatus {
   FAILED
   CANCELLED
   REFUNDED
+}
+
+// NOUVEAUX ENUMS: Espace Gérant
+enum ManagerBookingType {
+  HOURLY
+  NIGHTLY
+  EXTENDED
+}
+
+enum ManagerBookingStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  EXTENDED
+  CANCELLED
+}
+
+enum ManagerAction {
+  CHECK_IN
+  CHECK_OUT
+  EXTEND
+  CANCEL
+  PAYMENT
+  OVERTIME
+  CREATE
 }

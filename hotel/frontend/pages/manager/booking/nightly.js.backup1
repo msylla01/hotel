@@ -1,0 +1,462 @@
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import Link from 'next/link'
+import { motion } from 'framer-motion'
+import { 
+  ArrowLeftIcon,
+  CalendarDaysIcon,
+  HomeIcon,
+  BanknotesIcon,
+  PrinterIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline'
+
+export default function NightlyBooking() {
+  const router = useRouter()
+  const { roomId } = router.query
+  const [user, setUser] = useState(null)
+  const [rooms, setRooms] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(null)
+  const [formData, setFormData] = useState({
+    roomId: roomId || '',
+    checkIn: '',
+    notes: ''
+  })
+
+  useEffect(() => {
+    // Vérifier authentification gérant
+    const token = localStorage.getItem('hotel_token')
+    const userData = localStorage.getItem('hotel_user')
+    
+    if (!token || !userData) {
+      router.push('/auth/login')
+      return
+    }
+
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      const user = JSON.parse(userData)
+      if (user.role !== "MANAGER" && user.role !== "ADMIN") {
+        router.push('/dashboard')
+        return
+      }
+
+      setUser(user)
+      fetchAvailableRooms()
+
+      // Définir 22h aujourd'hui par défaut
+      const tonight = new Date()
+      tonight.setHours(22, 0, 0, 0)
+      setFormData(prev => ({
+        ...prev,
+        checkIn: tonight.toISOString().slice(0, 16),
+        roomId: roomId || prev.roomId
+      }))
+    } catch (err) {
+      console.error('❌ Erreur auth gérant [msylla01]:', err)
+      router.push('/auth/login')
+    }
+  }, [router, roomId])
+
+  const fetchAvailableRooms = async () => {
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/manager/dashboard', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        const availableRooms = data.data.rooms.filter(room => !room.isOccupied)
+        setRooms(availableRooms)
+      }
+    } catch (error) {
+      console.error('❌ Erreur récupération chambres [msylla01]:', error)
+      // Fallback
+      setRooms([
+        { id: '1', name: 'Chambre 101', type: 'DOUBLE', price: 120, isOccupied: false },
+        { id: '2', name: 'Suite 201', type: 'SUITE', price: 250, isOccupied: false }
+      ])
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    if (!formData.roomId || !formData.checkIn) {
+      setError('Veuillez remplir tous les champs obligatoires')
+      return
+    }
+
+    // Vérifier que l'heure est >= 22h
+    const checkInTime = new Date(formData.checkIn)
+    if (checkInTime.getHours() < 22) {
+      setError('Les nuitées commencent à partir de 22h00')
+      return
+    }
+
+    try {
+      console.log("🔐 Vérification auth gérant:", user.email, user.role);
+      setLoading(true)
+      setError('')
+
+      const token = localStorage.getItem('hotel_token')
+      const response = await fetch('http://localhost:5000/api/manager/booking/nightly', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setSuccess(data)
+        console.log('✅ Réservation nuitée créée [msylla01]:', data.booking.id)
+      } else {
+        throw new Error(data.message || 'Erreur création réservation')
+      }
+    } catch (error) {
+      console.error('❌ Erreur création réservation nuitée [msylla01]:', error)
+      setError(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getSelectedRoom = () => {
+    return rooms.find(r => r.id === formData.roomId)
+  }
+
+  const getCheckOutTime = () => {
+    if (!formData.checkIn) return ''
+    
+    const checkIn = new Date(formData.checkIn)
+    const checkOut = new Date(checkIn)
+    checkOut.setDate(checkOut.getDate() + 1)
+    checkOut.setHours(12, 0, 0, 0)
+    return checkOut.toLocaleString('fr-FR')
+  }
+
+  if (success) {
+    return (
+      <>
+        <Head>
+          <title>Nuitée Créée - Espace Gérant</title>
+        </Head>
+
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4"
+          >
+            <div className="text-center mb-6">
+              <CheckCircleIcon className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Nuitée Enregistrée !
+              </h2>
+              <p className="text-gray-600">
+                Séjour nuitée créé avec succès
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded-lg">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Reçu N°:</span>
+                <span className="font-mono text-sm">{success.receipt.number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Chambre:</span>
+                <span className="font-medium">{success.receipt.room}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Période:</span>
+                <span>{success.receipt.duration}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Entrée:</span>
+                <span>{success.receipt.checkIn}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Sortie:</span>
+                <span className="font-medium text-orange-600">{success.receipt.checkOut}</span>
+              </div>
+              <div className="flex justify-between border-t pt-3">
+                <span className="font-bold">TOTAL:</span>
+                <span className="font-bold text-blue-600">{success.receipt.total}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  const receiptWindow = window.open('', '_blank')
+                  receiptWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>Reçu Nuitée - Hotel Luxe</title>
+                      <style>
+                        body { font-family: Arial, sans-serif; max-width: 300px; margin: 20px auto; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                        .row { display: flex; justify-content: space-between; margin: 5px 0; }
+                        .total { border-top: 2px solid #000; padding-top: 10px; font-weight: bold; }
+                        .footer { text-align: center; margin-top: 15px; font-size: 12px; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="header">
+                        <h2>HOTEL LUXE</h2>
+                        <p>NUITÉE</p>
+                        <p>Reçu N° ${success.receipt.number}</p>
+                      </div>
+                      
+                      <div class="row"><span>Chambre:</span><span>${success.receipt.room}</span></div>
+                      <div class="row"><span>Type:</span><span>${success.receipt.type}</span></div>
+                      <div class="row"><span>Période:</span><span>${success.receipt.duration}</span></div>
+                      <div class="row"><span>Entrée:</span><span>${success.receipt.checkIn}</span></div>
+                      <div class="row"><span>Sortie:</span><span>${success.receipt.checkOut}</span></div>
+                      
+                      <div class="total">
+                        <div class="row"><span>TOTAL:</span><span>${success.receipt.total}</span></div>
+                      </div>
+                      
+                      <div class="footer">
+                        <p>Gérant: ${user?.firstName} ${user?.lastName}</p>
+                        <p>Merci de votre visite !</p>
+                        <p>Hotel Luxe - 2025-10-03 23:16:23</p>
+                      </div>
+                    </body>
+                    </html>
+                  `)
+                  receiptWindow.document.close()
+                  receiptWindow.print()
+                }}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+              >
+                <PrinterIcon className="w-5 h-5" />
+                <span>Imprimer Reçu</span>
+              </button>
+              
+              <Link
+                href="/manager"
+                className="block w-full bg-gray-600 text-white py-3 rounded-lg hover:bg-gray-700 transition-colors text-center"
+              >
+                Retour Dashboard
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Head>
+        <title>Réservation Nuitée - Espace Gérant</title>
+        <meta name="description" content="Créer une réservation nuitée 22h-12h" />
+      </Head>
+
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center py-4">
+              <div className="flex items-center space-x-4">
+                <Link href="/manager" className="flex items-center text-gray-600 hover:text-blue-600 transition-colors">
+                  <ArrowLeftIcon className="w-5 h-5 mr-2" />
+                  Espace Gérant
+                </Link>
+                <div className="text-gray-300">•</div>
+                <h1 className="text-xl font-bold text-gray-900">Réservation Nuitée</h1>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-600">
+                  🏨 {user?.firstName} {user?.lastName}
+                </span>
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">Gérant</span>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl shadow-sm p-8"
+          >
+            {/* En-tête */}
+            <div className="flex items-center space-x-3 mb-8">
+              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+                <CalendarDaysIcon className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Nuitée Standardisée</h2>
+                <p className="text-gray-600">Entrée à partir de 22h00 • Sortie à 12h00 (+1 jour)</p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-800">❌ {error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Sélection chambre */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Chambre disponible *
+                </label>
+                <select
+                  value={formData.roomId}
+                  onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Sélectionner une chambre</option>
+                  {rooms.map(room => (
+                    <option key={room.id} value={room.id}>
+                      {room.name} - {room.type} ({room.price || 120}€/nuit)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Heure d'entrée */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Heure d'entrée * (22h00 minimum)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={formData.checkIn}
+                  onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  ⏰ Les nuitées commencent obligatoirement à partir de 22h00
+                </p>
+              </div>
+
+              {/* Résumé */}
+              {formData.roomId && formData.checkIn && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-blue-900 mb-3">🌙 Résumé de la nuitée</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Chambre:</span>
+                      <span className="font-medium">
+                        {getSelectedRoom()?.name} ({getSelectedRoom()?.type})
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Entrée:</span>
+                      <span>{new Date(formData.checkIn).toLocaleString('fr-FR')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Sortie prévue:</span>
+                      <span className="font-medium text-orange-600">{getCheckOutTime()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Durée:</span>
+                      <span>22h00 → 12h00 (+1 jour)</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-2">
+                      <span className="font-bold">TOTAL:</span>
+                      <span className="font-bold text-blue-600 text-lg">
+                        {getSelectedRoom()?.price || 120}€
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (optionnel)
+                </label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  placeholder="Notes particulières pour cette nuitée..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Boutons */}
+              <div className="flex space-x-4 pt-6 border-t">
+                <Link
+                  href="/manager"
+                  className="flex-1 border border-gray-300 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-50 transition-colors text-center"
+                >
+                  Annuler
+                </Link>
+                <button
+                  type="submit"
+                  disabled={loading || !formData.roomId || !formData.checkIn}
+                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Création...</span>
+                    </>
+                  ) : (
+                    <>
+                      <BanknotesIcon className="w-5 h-5" />
+                      <span>Enregistrer Nuitée</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+
+          {/* Info nuitée */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-white rounded-lg shadow-sm p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">🌙 Informations Nuitée</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="font-semibold text-blue-900">Horaire d'entrée</div>
+                <div className="text-lg font-bold text-blue-600">À partir de 22h00</div>
+              </div>
+              <div className="text-center p-4 bg-orange-50 rounded-lg">
+                <div className="font-semibold text-orange-900">Horaire de sortie</div>
+                <div className="text-lg font-bold text-orange-600">12h00 lendemain</div>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="font-semibold text-green-900">Tarification</div>
+                <div className="text-lg font-bold text-green-600">Prix standard chambre</div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Footer info */}
+          <div className="mt-6 text-center text-gray-500 text-sm">
+            Réservation Nuitée • Espace Gérant • msylla01 • 2025-10-03 23:16:23
+          </div>
+        </main>
+      </div>
+    </>
+  )
+}
