@@ -5,15 +5,14 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { 
   ArrowLeftIcon,
-  CalendarDaysIcon,
+  ClockIcon,
+  HomeIcon,
   BanknotesIcon,
   PrinterIcon,
-  CheckCircleIcon,
-  FireIcon,
-  CloudIcon
+  CheckCircleIcon
 } from '@heroicons/react/24/outline'
 
-export default function NightlyBooking() {
+export default function HourlyBooking() {
   const router = useRouter()
   const { roomId } = router.query
   const [user, setUser] = useState(null)
@@ -23,12 +22,21 @@ export default function NightlyBooking() {
   const [success, setSuccess] = useState(null)
   const [formData, setFormData] = useState({
     roomId: roomId || '',
-    climateType: '', // NOUVEAU: climatisation obligatoire
     checkIn: '',
+    duration: 2,
     notes: ''
   })
 
+  const hourlyRates = {
+    'SINGLE': 15,
+    'DOUBLE': 20,
+    'SUITE': 35,
+    'FAMILY': 25,
+    'DELUXE': 45
+  }
+
   useEffect(() => {
+    // Vérifier authentification gérant
     const token = localStorage.getItem('hotel_token')
     const userData = localStorage.getItem('hotel_user')
     
@@ -38,9 +46,8 @@ export default function NightlyBooking() {
     }
 
     try {
+      console.log("🔐 Opération gérant [msylla01]");
       const user = JSON.parse(userData)
-      console.log("🔐 Auth gérant nightly:", user.email, user.role);
-      
       if (user.role !== "MANAGER" && user.role !== "ADMIN") {
         router.push('/dashboard')
         return
@@ -49,12 +56,12 @@ export default function NightlyBooking() {
       setUser(user)
       fetchAvailableRooms()
 
-      // Définir 22h aujourd'hui par défaut
-      const tonight = new Date()
-      tonight.setHours(22, 0, 0, 0)
+      // Définir heure actuelle par défaut
+      const now = new Date()
+      now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15) // Arrondir aux 15min
       setFormData(prev => ({
         ...prev,
-        checkIn: tonight.toISOString().slice(0, 16),
+        checkIn: now.toISOString().slice(0, 16),
         roomId: roomId || prev.roomId
       }))
     } catch (err) {
@@ -65,8 +72,7 @@ export default function NightlyBooking() {
 
   const fetchAvailableRooms = async () => {
     try {
-      console.log("🔐 Récupération chambres nightly [msylla01]");
-      
+      console.log("🔐 Opération gérant [msylla01]");
       const token = localStorage.getItem('hotel_token')
       const response = await fetch('http://localhost:5000/api/manager/dashboard', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -81,9 +87,8 @@ export default function NightlyBooking() {
       console.error('❌ Erreur récupération chambres [msylla01]:', error)
       // Fallback
       setRooms([
-        { id: '1', name: 'CH1', type: 'DOUBLE', price: 120, isOccupied: false },
-        { id: '2', name: 'CH2', type: 'SUITE', price: 250, isOccupied: false },
-        { id: '3', name: 'CH3', type: 'SINGLE', price: 80, isOccupied: false }
+        { id: '1', name: 'Chambre 101', type: 'DOUBLE', isOccupied: false },
+        { id: '2', name: 'Suite 201', type: 'SUITE', isOccupied: false }
       ])
     }
   }
@@ -91,25 +96,18 @@ export default function NightlyBooking() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!formData.roomId || !formData.climateType || !formData.checkIn) {
-      setError('Veuillez remplir tous les champs obligatoires y compris la climatisation')
-      return
-    }
-
-    // Vérifier que l'heure est >= 22h
-    const checkInTime = new Date(formData.checkIn)
-    if (checkInTime.getHours() < 22) {
-      setError('Les nuitées commencent à partir de 22h00')
+    if (!formData.roomId || !formData.checkIn || !formData.duration) {
+      setError('Veuillez remplir tous les champs obligatoires')
       return
     }
 
     try {
-      console.log("🔐 Création réservation nuitée [msylla01]");
+      console.log("🔐 Opération gérant [msylla01]");
       setLoading(true)
       setError('')
 
       const token = localStorage.getItem('hotel_token')
-      const response = await fetch('http://localhost:5000/api/manager/booking/nightly', {
+      const response = await fetch('http://localhost:5000/api/manager/booking/hourly', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -122,40 +120,17 @@ export default function NightlyBooking() {
 
       if (response.ok && data.success) {
         setSuccess(data)
-        console.log('✅ Réservation nuitée créée [msylla01]:', data.booking.id)
+        console.log('✅ Réservation horaire créée [msylla01]:', data.booking.id)
       } else {
         throw new Error(data.message || 'Erreur création réservation')
       }
     } catch (error) {
-      console.error('❌ Erreur création réservation nuitée [msylla01]:', error)
+      console.error('❌ Erreur création réservation horaire [msylla01]:', error)
       setError(error.message)
     } finally {
       setLoading(false)
     }
   }
-
-  const getSelectedRoom = () => {
-    return rooms.find(r => r.id === formData.roomId)
-  }
-
-  const calculateTotal = () => {
-    const room = getSelectedRoom()
-    if (!room || !formData.climateType) return 0
-    
-    const basePrice = room.price || 120
-    return formData.climateType === 'CLIMATISE' ? basePrice + 15 : basePrice
-  }
-
-  const getCheckOutTime = () => {
-    if (!formData.checkIn) return ''
-    
-    const checkIn = new Date(formData.checkIn)
-    const checkOut = new Date(checkIn)
-    checkOut.setDate(checkOut.getDate() + 1)
-    checkOut.setHours(12, 0, 0, 0)
-    return checkOut.toLocaleString('fr-FR')
-  }
-
   const printReceipt = () => {
     if (!success?.receipt) return
 
@@ -164,12 +139,11 @@ export default function NightlyBooking() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Reçu Nuitée - Hotel Luxe</title>
+        <title>Reçu - Hotel Luxe</title>
         <style>
-          body { font-family: Arial, sans-serif; max-width: 350px; margin: 20px auto; }
+          body { font-family: Arial, sans-serif; max-width: 300px; margin: 20px auto; }
           .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
           .row { display: flex; justify-content: space-between; margin: 5px 0; }
-          .climate { background: #f0f8ff; padding: 10px; margin: 10px 0; border-radius: 5px; }
           .total { border-top: 2px solid #000; padding-top: 10px; font-weight: bold; }
           .footer { text-align: center; margin-top: 15px; font-size: 12px; }
         </style>
@@ -177,32 +151,25 @@ export default function NightlyBooking() {
       <body>
         <div class="header">
           <h2>HOTEL LUXE</h2>
-          <p>NUITÉE STANDARDISÉE</p>
           <p>Reçu N° ${success.receipt.number}</p>
           <p>${success.receipt.timestamp}</p>
         </div>
         
         <div class="row"><span>Chambre:</span><span>${success.receipt.room}</span></div>
-        <div class="row"><span>Type:</span><span>${success.receipt.roomType}</span></div>
-        
-        <div class="climate">
-          <div class="row"><span>Climatisation:</span><span>${success.receipt.climateType === 'CLIMATISE' ? '❄️ Climatisé' : '🔥 Ventilé'}</span></div>
-          <div class="row"><span>Tarif base:</span><span>${success.receipt.baseRate}</span></div>
-          <div class="row"><span>Supplément:</span><span>${success.receipt.climateSupplement}</span></div>
-        </div>
-        
-        <div class="row"><span>Période:</span><span>${success.receipt.duration}</span></div>
+        <div class="row"><span>Type:</span><span>${success.receipt.type}</span></div>
+        <div class="row"><span>Durée:</span><span>${success.receipt.duration}</span></div>
         <div class="row"><span>Entrée:</span><span>${success.receipt.checkIn}</span></div>
         <div class="row"><span>Sortie:</span><span>${success.receipt.checkOut}</span></div>
+        <div class="row"><span>Tarif:</span><span>${success.receipt.rate}</span></div>
         
         <div class="total">
           <div class="row"><span>TOTAL:</span><span>${success.receipt.total}</span></div>
         </div>
         
         <div class="footer">
-          <p>Gérant: ${success.receipt.manager}</p>
+          <p>Gérant: ${user?.firstName} ${user?.lastName}</p>
           <p>Merci de votre visite !</p>
-          <p>Hotel Luxe - 2025-10-04 03:33:23</p>
+          <p>Hotel Luxe - 2025-10-03 23:16:23</p>
         </div>
       </body>
       </html>
@@ -211,11 +178,29 @@ export default function NightlyBooking() {
     receiptWindow.print()
   }
 
+  const calculateTotal = () => {
+    if (!formData.roomId || !formData.duration) return 0
+    
+    const selectedRoom = rooms.find(r => r.id === formData.roomId)
+    if (!selectedRoom) return 0
+    
+    const rate = hourlyRates[selectedRoom.type] || 20
+    return rate * formData.duration
+  }
+
+  const getCheckOutTime = () => {
+    if (!formData.checkIn || !formData.duration) return ''
+    
+    const checkIn = new Date(formData.checkIn)
+    const checkOut = new Date(checkIn.getTime() + (formData.duration * 60 * 60 * 1000))
+    return checkOut.toLocaleString('fr-FR')
+  }
+
   if (success) {
     return (
       <>
         <Head>
-          <title>Nuitée Créée - Espace Gérant</title>
+          <title>Réservation Créée - Espace Gérant</title>
         </Head>
 
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -225,12 +210,12 @@ export default function NightlyBooking() {
             className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full mx-4"
           >
             <div className="text-center mb-6">
-              <CheckCircleIcon className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+              <CheckCircleIcon className="w-16 h-16 text-green-500 mx-auto mb-4" />
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Nuitée Enregistrée !
+                Réservation Créée !
               </h2>
               <p className="text-gray-600">
-                Nuitée avec climatisation créée avec succès
+                Séjour horaire enregistré avec succès
               </p>
             </div>
 
@@ -244,20 +229,7 @@ export default function NightlyBooking() {
                 <span className="font-medium">{success.receipt.room}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Type:</span>
-                <span className="flex items-center space-x-1">
-                  <span>{success.receipt.roomType}</span>
-                  {success.receipt.climateType === 'CLIMATISE' ? 
-                    <CloudIcon className="w-4 h-4 text-blue-500" /> : 
-                    <FireIcon className="w-4 h-4 text-orange-500" />
-                  }
-                  <span className="text-xs">
-                    {success.receipt.climateType === 'CLIMATISE' ? 'Climatisé' : 'Ventilé'}
-                  </span>
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Période:</span>
+                <span className="text-gray-600">Durée:</span>
                 <span>{success.receipt.duration}</span>
               </div>
               <div className="flex justify-between">
@@ -266,11 +238,11 @@ export default function NightlyBooking() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Sortie:</span>
-                <span className="font-medium text-orange-600">{success.receipt.checkOut}</span>
+                <span>{success.receipt.checkOut}</span>
               </div>
               <div className="flex justify-between border-t pt-3">
                 <span className="font-bold">TOTAL:</span>
-                <span className="font-bold text-blue-600">{success.receipt.total}</span>
+                <span className="font-bold text-green-600">{success.receipt.total}</span>
               </div>
             </div>
 
@@ -289,6 +261,13 @@ export default function NightlyBooking() {
               >
                 Retour Dashboard
               </Link>
+              
+              <Link
+                href="/manager/booking/hourly"
+                className="block w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors text-center"
+              >
+                Nouvelle Réservation
+              </Link>
             </div>
           </motion.div>
         </div>
@@ -299,8 +278,8 @@ export default function NightlyBooking() {
   return (
     <>
       <Head>
-        <title>Réservation Nuitée - Espace Gérant</title>
-        <meta name="description" content="Créer une nuitée standardisée avec climatisation" />
+        <title>Réservation Horaire - Espace Gérant</title>
+        <meta name="description" content="Créer une réservation horaire de 1h à 5h" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -314,7 +293,7 @@ export default function NightlyBooking() {
                   Espace Gérant
                 </Link>
                 <div className="text-gray-300">•</div>
-                <h1 className="text-xl font-bold text-gray-900">Nuitée Standardisée</h1>
+                <h1 className="text-xl font-bold text-gray-900">Réservation Horaire</h1>
               </div>
 
               <div className="flex items-center space-x-4">
@@ -335,12 +314,12 @@ export default function NightlyBooking() {
           >
             {/* En-tête */}
             <div className="flex items-center space-x-3 mb-8">
-              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-                <CalendarDaysIcon className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center">
+                <ClockIcon className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Nuitée Standardisée</h2>
-                <p className="text-gray-600">22h00 - 12h00 (+1 jour) • Climatisation obligatoire</p>
+                <h2 className="text-2xl font-bold text-gray-900">Séjour Horaire</h2>
+                <p className="text-gray-600">Durée de 1h à 5h • Tarification automatique</p>
               </div>
             </div>
 
@@ -359,100 +338,69 @@ export default function NightlyBooking() {
                 <select
                   value={formData.roomId}
                   onChange={(e) => setFormData({ ...formData, roomId: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   required
                 >
                   <option value="">Sélectionner une chambre</option>
                   {rooms.map(room => (
                     <option key={room.id} value={room.id}>
-                      {room.name} - {room.type} (base: {room.price || 120}€)
+                      {room.name} - {room.type} ({hourlyRates[room.type] || 20}€/h)
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Type climatisation OBLIGATOIRE */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Type climatisation * <span className="text-red-600">(OBLIGATOIRE)</span>
-                </label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-orange-50 transition-colors">
-                    <input
-                      type="radio"
-                      name="climateType"
-                      value="VENTILE"
-                      checked={formData.climateType === 'VENTILE'}
-                      onChange={(e) => setFormData({ ...formData, climateType: e.target.value })}
-                      className="mr-3"
-                      required
-                    />
-                    <FireIcon className="w-6 h-6 text-orange-500 mr-3" />
-                    <div>
-                      <div className="font-medium">Chambre Ventilée</div>
-                      <div className="text-sm text-gray-600">
-                        Tarif standard
-                        {getSelectedRoom() && ` - ${getSelectedRoom().price || 120}€`}
-                      </div>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
-                    <input
-                      type="radio"
-                      name="climateType"
-                      value="CLIMATISE"
-                      checked={formData.climateType === 'CLIMATISE'}
-                      onChange={(e) => setFormData({ ...formData, climateType: e.target.value })}
-                      className="mr-3"
-                      required
-                    />
-                    <CloudIcon className="w-6 h-6 text-blue-500 mr-3" />
-                    <div>
-                      <div className="font-medium">Chambre Climatisée</div>
-                      <div className="text-sm text-gray-600">
-                        Supplément +15€
-                        {getSelectedRoom() && ` - ${(getSelectedRoom().price || 120) + 15}€`}
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
               {/* Heure d'entrée */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Heure d'entrée * (22h00 minimum)
+                  Heure d'entrée *
                 </label>
                 <input
                   type="datetime-local"
                   value={formData.checkIn}
                   onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
-                  min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  ⏰ Les nuitées commencent obligatoirement à partir de 22h00
-                </p>
               </div>
 
-              {/* Résumé avec climatisation */}
-              {formData.roomId && formData.climateType && formData.checkIn && (
+              {/* Durée */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Durée du séjour *
+                </label>
+                <div className="grid grid-cols-5 gap-3">
+                  {[1, 2, 3, 4, 5].map(hours => (
+                    <button
+                      key={hours}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, duration: hours })}
+                      className={`p-3 text-center border-2 rounded-lg transition-colors ${
+                        formData.duration === hours
+                          ? 'border-green-500 bg-green-50 text-green-700'
+                          : 'border-gray-300 hover:border-green-300'
+                      }`}
+                    >
+                      <div className="font-bold">{hours}h</div>
+                      {formData.roomId && (
+                        <div className="text-xs text-gray-600">
+                          {(hourlyRates[rooms.find(r => r.id === formData.roomId)?.type] || 20) * hours}€
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Résumé */}
+              {formData.roomId && formData.checkIn && formData.duration && (
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-blue-900 mb-3">🌙 Résumé de la nuitée</h3>
+                  <h3 className="font-semibold text-blue-900 mb-3">📋 Résumé de la réservation</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>Chambre:</span>
-                      <span className="font-medium flex items-center space-x-1">
-                        <span>{getSelectedRoom()?.name} ({getSelectedRoom()?.type})</span>
-                        {formData.climateType === 'CLIMATISE' ? 
-                          <CloudIcon className="w-4 h-4 text-blue-500" /> : 
-                          <FireIcon className="w-4 h-4 text-orange-500" />
-                        }
-                        <span className="text-xs">
-                          {formData.climateType === 'CLIMATISE' ? 'Climatisé' : 'Ventilé'}
-                        </span>
+                      <span className="font-medium">
+                        {rooms.find(r => r.id === formData.roomId)?.name}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -465,21 +413,11 @@ export default function NightlyBooking() {
                     </div>
                     <div className="flex justify-between">
                       <span>Durée:</span>
-                      <span>22h00 → 12h00 (+1 jour)</span>
+                      <span>{formData.duration} heure(s)</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Tarif base:</span>
-                      <span>{getSelectedRoom()?.price || 120}€</span>
-                    </div>
-                    {formData.climateType === 'CLIMATISE' && (
-                      <div className="flex justify-between">
-                        <span>Supplément climatisation:</span>
-                        <span className="text-blue-600">+15€</span>
-                      </div>
-                    )}
                     <div className="flex justify-between border-t pt-2">
                       <span className="font-bold">TOTAL:</span>
-                      <span className="font-bold text-blue-600 text-lg">
+                      <span className="font-bold text-green-600 text-lg">
                         {calculateTotal()}€
                       </span>
                     </div>
@@ -495,9 +433,9 @@ export default function NightlyBooking() {
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Notes particulières pour cette nuitée..."
+                  placeholder="Notes particulières pour ce séjour..."
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-none"
                 />
               </div>
 
@@ -511,8 +449,8 @@ export default function NightlyBooking() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={loading || !formData.roomId || !formData.climateType || !formData.checkIn}
-                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  disabled={loading || !formData.roomId || !formData.checkIn}
+                  className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   {loading ? (
                     <>
@@ -522,7 +460,7 @@ export default function NightlyBooking() {
                   ) : (
                     <>
                       <BanknotesIcon className="w-5 h-5" />
-                      <span>Enregistrer Nuitée</span>
+                      <span>Enregistrer & Encaisser</span>
                     </>
                   )}
                 </button>
@@ -530,9 +468,27 @@ export default function NightlyBooking() {
             </form>
           </motion.div>
 
+          {/* Info tarifs */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-white rounded-lg shadow-sm p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">💰 Tarifs Horaires</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {Object.entries(hourlyRates).map(([type, rate]) => (
+                <div key={type} className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="font-semibold text-gray-900">{type}</div>
+                  <div className="text-lg font-bold text-green-600">{rate}€/h</div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
           {/* Footer info */}
           <div className="mt-6 text-center text-gray-500 text-sm">
-            Nuitée Standardisée • Climatisation Obligatoire • msylla01 • 2025-10-04 03:33:23
+            Réservation Horaire • Espace Gérant • msylla01 • 2025-10-03 23:16:23
           </div>
         </main>
       </div>

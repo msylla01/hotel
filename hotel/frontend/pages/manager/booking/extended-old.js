@@ -10,9 +10,7 @@ import {
   BanknotesIcon,
   PrinterIcon,
   CheckCircleIcon,
-  CalendarDaysIcon,
-  FireIcon,
-  CloudIcon
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline'
 
 export default function ExtendedBooking() {
@@ -25,7 +23,6 @@ export default function ExtendedBooking() {
   const [success, setSuccess] = useState(null)
   const [formData, setFormData] = useState({
     roomId: roomId || '',
-    climateType: '', // NOUVEAU: climatisation obligatoire
     checkIn: '',
     checkOut: '',
     clientFirstName: '',
@@ -36,21 +33,8 @@ export default function ExtendedBooking() {
     notes: ''
   })
 
-  // Tarifs par jour avec climatisation
-  const dailyRates = {
-    'SINGLE_VENTILE': 80,
-    'SINGLE_CLIMATISE': 95,
-    'DOUBLE_VENTILE': 120,
-    'DOUBLE_CLIMATISE': 135,
-    'SUITE_VENTILE': 250,
-    'SUITE_CLIMATISE': 280,
-    'FAMILY_VENTILE': 150,
-    'FAMILY_CLIMATISE': 170,
-    'DELUXE_VENTILE': 300,
-    'DELUXE_CLIMATISE': 350
-  }
-
   useEffect(() => {
+    // Vérifier authentification gérant
     const token = localStorage.getItem('hotel_token')
     const userData = localStorage.getItem('hotel_user')
     
@@ -60,7 +44,7 @@ export default function ExtendedBooking() {
     }
 
     try {
-      console.log("🔐 Auth gérant extended [msylla01] - 2025-10-04 23:53:37");
+      console.log("🔐 Opération gérant [msylla01]");
       const user = JSON.parse(userData)
       if (user.role !== "MANAGER" && user.role !== "ADMIN") {
         router.push('/dashboard')
@@ -89,7 +73,7 @@ export default function ExtendedBooking() {
 
   const fetchAvailableRooms = async () => {
     try {
-      console.log("🏨 Récupération chambres extended [msylla01]");
+      console.log("🔐 Opération gérant [msylla01]");
       const token = localStorage.getItem('hotel_token')
       const response = await fetch('http://localhost:5000/api/manager/dashboard', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -99,17 +83,13 @@ export default function ExtendedBooking() {
       if (data.success) {
         const availableRooms = data.data.rooms.filter(room => !room.isOccupied)
         setRooms(availableRooms)
-        console.log(`✅ ${availableRooms.length} chambres disponibles récupérées`);
       }
     } catch (error) {
       console.error('❌ Erreur récupération chambres [msylla01]:', error)
-      // Fallback avec noms originaux
+      // Fallback
       setRooms([
-        { id: '1', name: 'Chambre 101', type: 'DOUBLE', price: 120, climateType: 'VENTILE' },
-        { id: '2', name: 'Suite 201', type: 'SUITE', price: 250, climateType: 'CLIMATISE' },
-        { id: '3', name: 'Chambre 102', type: 'SINGLE', price: 80, climateType: 'VENTILE' },
-        { id: '4', name: 'Chambre 103', type: 'DOUBLE', price: 135, climateType: 'CLIMATISE' },
-        { id: '5', name: 'Suite 202', type: 'SUITE', price: 280, climateType: 'CLIMATISE' }
+        { id: '1', name: 'Chambre 101', type: 'DOUBLE', price: 120, isOccupied: false },
+        { id: '2', name: 'Suite 201', type: 'SUITE', price: 250, isOccupied: false }
       ])
     }
   }
@@ -117,11 +97,11 @@ export default function ExtendedBooking() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    // Validation AVEC climatisation
-    const requiredFields = ['roomId', 'climateType', 'checkIn', 'checkOut', 'clientFirstName', 'clientLastName', 'clientPhone', 'clientIdNumber']
+    // Validation
+    const requiredFields = ['roomId', 'checkIn', 'checkOut', 'clientFirstName', 'clientLastName', 'clientPhone', 'clientIdNumber']
     for (const field of requiredFields) {
       if (!formData[field]) {
-        setError(`Veuillez remplir tous les champs obligatoires (${field} manquant)`)
+        setError('Veuillez remplir tous les champs obligatoires')
         return
       }
     }
@@ -133,17 +113,9 @@ export default function ExtendedBooking() {
     }
 
     try {
-      console.log("🔐 Création réservation prolongée avec climatisation [msylla01]");
+      console.log("🔐 Opération gérant [msylla01]");
       setLoading(true)
       setError('')
-
-      // Préparer les données avec climatisation
-      const bookingData = {
-        ...formData,
-        roomType: getSelectedRoom()?.type
-      }
-
-      console.log('📝 Données envoyées:', bookingData);
 
       const token = localStorage.getItem('hotel_token')
       const response = await fetch('http://localhost:5000/api/manager/booking/extended', {
@@ -152,15 +124,14 @@ export default function ExtendedBooking() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(bookingData)
+        body: JSON.stringify(formData)
       })
 
       const data = await response.json()
-      console.log('📡 Réponse reçue:', data);
 
       if (response.ok && data.success) {
         setSuccess(data)
-        console.log('✅ Réservation prolongée créée [msylla01]:', data.booking?.id)
+        console.log('✅ Réservation prolongée créée [msylla01]:', data.booking.id)
       } else {
         throw new Error(data.message || 'Erreur création réservation')
       }
@@ -187,83 +158,10 @@ export default function ExtendedBooking() {
 
   const calculateTotal = () => {
     const room = getSelectedRoom()
-    if (!room || !formData.climateType) return 0
+    if (!room) return 0
     
     const days = calculateDuration()
-    const rateKey = `${room.type}_${formData.climateType}`
-    const dailyRate = dailyRates[rateKey] || room.price || 120
-    
-    return dailyRate * days
-  }
-
-  const getDailyRate = () => {
-    const room = getSelectedRoom()
-    if (!room || !formData.climateType) return 0
-    
-    const rateKey = `${room.type}_${formData.climateType}`
-    return dailyRates[rateKey] || room.price || 120
-  }
-
-  const printReceipt = () => {
-    if (!success?.receipt) return
-
-    const receiptWindow = window.open('', '_blank')
-    receiptWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Reçu Séjour Prolongé - Hotel Luxe</title>
-        <style>
-          body { font-family: Arial, sans-serif; max-width: 350px; margin: 20px auto; }
-          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
-          .row { display: flex; justify-content: space-between; margin: 5px 0; }
-          .client { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
-          .climate { background: #f0f8ff; padding: 10px; margin: 10px 0; border-radius: 5px; }
-          .total { border-top: 2px solid #000; padding-top: 10px; font-weight: bold; }
-          .footer { text-align: center; margin-top: 15px; font-size: 12px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h2>HOTEL LUXE</h2>
-          <p>SÉJOUR PROLONGÉ</p>
-          <p>Reçu N° ${success.receipt.number}</p>
-          <p>${new Date().toLocaleString('fr-FR')}</p>
-        </div>
-        
-        <div class="client">
-          <div class="row"><span>Client:</span><span>${success.receipt.client}</span></div>
-          <div class="row"><span>Téléphone:</span><span>${success.receipt.phone}</span></div>
-          <div class="row"><span>Pièce ID:</span><span>${success.receipt.id}</span></div>
-        </div>
-        
-        <div class="row"><span>Chambre:</span><span>${getSelectedRoom()?.name || success.receipt.room}</span></div>
-        <div class="row"><span>Type:</span><span>${getSelectedRoom()?.type}</span></div>
-        
-        <div class="climate">
-          <div class="row"><span>Climatisation:</span><span>${formData.climateType === 'CLIMATISE' ? '❄️ Climatisé' : '🔥 Ventilé'}</span></div>
-          <div class="row"><span>Supplément:</span><span>${success.receipt.climateSupplement || (formData.climateType === 'CLIMATISE' ? '+15€/jour' : 'Aucun')}</span></div>
-        </div>
-        
-        <div class="row"><span>Durée:</span><span>${calculateDuration()} jour(s)</span></div>
-        <div class="row"><span>Tarif/jour:</span><span>${getDailyRate()}€</span></div>
-        <div class="row"><span>Entrée:</span><span>${new Date(formData.checkIn).toLocaleString('fr-FR')}</span></div>
-        <div class="row"><span>Sortie:</span><span>${new Date(formData.checkOut).toLocaleString('fr-FR')}</span></div>
-        
-        <div class="total">
-          <div class="row"><span>TOTAL:</span><span>${calculateTotal()}€</span></div>
-        </div>
-        
-        <div class="footer">
-          <p>Gérant: ${user?.firstName} ${user?.lastName}</p>
-          <p>Merci de votre confiance !</p>
-          <p>Hotel Luxe - 2025-10-04 23:53:37</p>
-        </div>
-      </body>
-      </html>
-    `)
-    receiptWindow.document.close()
-    receiptWindow.print()
+    return (room.price || 120) * days
   }
 
   if (success) {
@@ -285,61 +183,100 @@ export default function ExtendedBooking() {
                 Séjour Prolongé Enregistré !
               </h2>
               <p className="text-gray-600">
-                Réservation créée avec pièce d'identité et climatisation
+                Réservation créée avec pièce d'identité
               </p>
             </div>
 
             <div className="space-y-3 mb-6 bg-gray-50 p-4 rounded-lg">
               <div className="flex justify-between">
                 <span className="text-gray-600">Reçu N°:</span>
-                <span className="font-mono text-sm">{success.receipt?.number}</span>
+                <span className="font-mono text-sm">{success.receipt.number}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Client:</span>
-                <span className="font-medium">{success.receipt?.client || `${formData.clientFirstName} ${formData.clientLastName}`}</span>
+                <span className="font-medium">{success.receipt.client}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Téléphone:</span>
-                <span>{success.receipt?.phone || formData.clientPhone}</span>
+                <span>{success.receipt.phone}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Pièce ID:</span>
-                <span className="font-mono text-xs">{success.receipt?.id || `${formData.clientIdType}: ${formData.clientIdNumber}`}</span>
+                <span className="font-mono text-xs">{success.receipt.id}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Chambre:</span>
-                <span className="font-medium">{getSelectedRoom()?.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Type:</span>
-                <span className="flex items-center space-x-1">
-                  <span>{getSelectedRoom()?.type}</span>
-                  {formData.climateType === 'CLIMATISE' ? 
-                    <CloudIcon className="w-4 h-4 text-blue-500" /> : 
-                    <FireIcon className="w-4 h-4 text-orange-500" />
-                  }
-                  <span className="text-xs">
-                    {formData.climateType === 'CLIMATISE' ? 'Climatisé' : 'Ventilé'}
-                  </span>
-                </span>
+                <span className="font-medium">{success.receipt.room}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Durée:</span>
-                <span>{calculateDuration()} jour(s)</span>
+                <span>{success.receipt.duration}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Tarif/jour:</span>
-                <span>{getDailyRate()}€</span>
+                <span className="text-gray-600">Période:</span>
+                <span className="text-xs">
+                  {success.receipt.checkIn} → {success.receipt.checkOut}
+                </span>
               </div>
               <div className="flex justify-between border-t pt-3">
                 <span className="font-bold">TOTAL:</span>
-                <span className="font-bold text-purple-600">{calculateTotal()}€</span>
+                <span className="font-bold text-purple-600">{success.receipt.total}</span>
               </div>
             </div>
 
             <div className="space-y-3">
               <button
-                onClick={printReceipt}
+                onClick={() => {
+                  const receiptWindow = window.open('', '_blank')
+                  receiptWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>Reçu Séjour Prolongé - Hotel Luxe</title>
+                      <style>
+                        body { font-family: Arial, sans-serif; max-width: 350px; margin: 20px auto; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                        .row { display: flex; justify-content: space-between; margin: 5px 0; }
+                        .client { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+                        .total { border-top: 2px solid #000; padding-top: 10px; font-weight: bold; }
+                        .footer { text-align: center; margin-top: 15px; font-size: 12px; }
+                      </style>
+                    </head>
+                    <body>
+                      <div class="header">
+                        <h2>HOTEL LUXE</h2>
+                        <p>SÉJOUR PROLONGÉ</p>
+                        <p>Reçu N° ${success.receipt.number}</p>
+                      </div>
+                      
+                      <div class="client">
+                        <div class="row"><span>Client:</span><span>${success.receipt.client}</span></div>
+                        <div class="row"><span>Téléphone:</span><span>${success.receipt.phone}</span></div>
+                        <div class="row"><span>Pièce ID:</span><span>${success.receipt.id}</span></div>
+                      </div>
+                      
+                      <div class="row"><span>Chambre:</span><span>${success.receipt.room}</span></div>
+                      <div class="row"><span>Type:</span><span>${success.receipt.type}</span></div>
+                      <div class="row"><span>Durée:</span><span>${success.receipt.duration}</span></div>
+                      <div class="row"><span>Tarif:</span><span>${success.receipt.rate}</span></div>
+                      <div class="row"><span>Entrée:</span><span>${success.receipt.checkIn}</span></div>
+                      <div class="row"><span>Sortie:</span><span>${success.receipt.checkOut}</span></div>
+                      
+                      <div class="total">
+                        <div class="row"><span>TOTAL:</span><span>${success.receipt.total}</span></div>
+                      </div>
+                      
+                      <div class="footer">
+                        <p>Gérant: ${user?.firstName} ${user?.lastName}</p>
+                        <p>Merci de votre confiance !</p>
+                        <p>Hotel Luxe - 2025-10-03 23:16:23</p>
+                      </div>
+                    </body>
+                    </html>
+                  `)
+                  receiptWindow.document.close()
+                  receiptWindow.print()
+                }}
                 className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center space-x-2"
               >
                 <PrinterIcon className="w-5 h-5" />
@@ -352,13 +289,6 @@ export default function ExtendedBooking() {
               >
                 Retour Dashboard
               </Link>
-              
-              <Link
-                href="/manager/booking/extended"
-                className="block w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors text-center"
-              >
-                Nouveau Séjour
-              </Link>
             </div>
           </motion.div>
         </div>
@@ -370,7 +300,7 @@ export default function ExtendedBooking() {
     <>
       <Head>
         <title>Séjour Prolongé - Espace Gérant</title>
-        <meta name="description" content="Créer une réservation prolongée avec pièce d'identité et climatisation" />
+        <meta name="description" content="Créer une réservation prolongée avec pièce d'identité" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -410,7 +340,7 @@ export default function ExtendedBooking() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">Séjour Prolongé</h2>
-                <p className="text-gray-600">Plusieurs jours • Pièce d'identité + climatisation obligatoires</p>
+                <p className="text-gray-600">Plusieurs jours • Pièce d'identité obligatoire</p>
               </div>
             </div>
 
@@ -501,7 +431,7 @@ export default function ExtendedBooking() {
                 </div>
               </div>
 
-              {/* Réservation avec climatisation */}
+              {/* Réservation */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Chambre */}
                 <div>
@@ -517,94 +447,45 @@ export default function ExtendedBooking() {
                     <option value="">Sélectionner une chambre</option>
                     {rooms.map(room => (
                       <option key={room.id} value={room.id}>
-                        {room.name} - {room.type} (base: {room.price || 120}€/jour)
+                        {room.name} - {room.type} ({room.price || 120}€/jour)
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* Type climatisation OBLIGATOIRE */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Type climatisation * <span className="text-red-600">(OBLIGATOIRE)</span>
-                  </label>
-                  <div className="space-y-3">
-                    <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-orange-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="climateType"
-                        value="VENTILE"
-                        checked={formData.climateType === 'VENTILE'}
-                        onChange={(e) => setFormData({ ...formData, climateType: e.target.value })}
-                        className="mr-3"
-                        required
-                      />
-                      <FireIcon className="w-5 h-5 text-orange-500 mr-2" />
-                      <div>
-                        <div className="font-medium">Chambre Ventilée</div>
-                        <div className="text-sm text-gray-600">
-                          Tarif standard
-                          {getSelectedRoom() && ` - ${dailyRates[`${getSelectedRoom().type}_VENTILE`] || getSelectedRoom().price}€/jour`}
-                        </div>
-                      </div>
+                {/* Dates */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date d'entrée *
                     </label>
-
-                    <label className="flex items-center p-3 border-2 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
-                      <input
-                        type="radio"
-                        name="climateType"
-                        value="CLIMATISE"
-                        checked={formData.climateType === 'CLIMATISE'}
-                        onChange={(e) => setFormData({ ...formData, climateType: e.target.value })}
-                        className="mr-3"
-                        required
-                      />
-                      <CloudIcon className="w-5 h-5 text-blue-500 mr-2" />
-                      <div>
-                        <div className="font-medium">Chambre Climatisée</div>
-                        <div className="text-sm text-gray-600">
-                          Supplément +15€/jour
-                          {getSelectedRoom() && ` - ${dailyRates[`${getSelectedRoom().type}_CLIMATISE`] || (getSelectedRoom().price + 15)}€/jour`}
-                        </div>
-                      </div>
+                    <input
+                      type="datetime-local"
+                      value={formData.checkIn}
+                      onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
+                      min={new Date().toISOString().slice(0, 16)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date de sortie *
                     </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.checkOut}
+                      onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
+                      min={formData.checkIn}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                      required
+                    />
                   </div>
                 </div>
               </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date d'entrée *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.checkIn}
-                    onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date de sortie *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.checkOut}
-                    onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
-                    min={formData.checkIn}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Résumé avec climatisation */}
-              {formData.roomId && formData.climateType && formData.checkIn && formData.checkOut && calculateDuration() > 0 && (
+              {/* Résumé */}
+              {formData.roomId && formData.checkIn && formData.checkOut && calculateDuration() > 0 && (
                 <div className="bg-purple-50 p-4 rounded-lg">
                   <h3 className="font-semibold text-purple-900 mb-3">📋 Résumé du séjour prolongé</h3>
                   <div className="space-y-2 text-sm">
@@ -620,15 +501,8 @@ export default function ExtendedBooking() {
                     </div>
                     <div className="flex justify-between">
                       <span>Chambre:</span>
-                      <span className="font-medium flex items-center space-x-1">
-                        <span>{getSelectedRoom()?.name} ({getSelectedRoom()?.type})</span>
-                        {formData.climateType === 'CLIMATISE' ? 
-                          <CloudIcon className="w-4 h-4 text-blue-500" /> : 
-                          <FireIcon className="w-4 h-4 text-orange-500" />
-                        }
-                        <span className="text-xs">
-                          {formData.climateType === 'CLIMATISE' ? 'Climatisé' : 'Ventilé'}
-                        </span>
+                      <span className="font-medium">
+                        {getSelectedRoom()?.name} ({getSelectedRoom()?.type})
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -646,8 +520,8 @@ export default function ExtendedBooking() {
                       <span>{calculateDuration()} jour(s)</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Tarif/jour:</span>
-                      <span>{getDailyRate()}€</span>
+                      <span>Tarif:</span>
+                      <span>{getSelectedRoom()?.price || 120}€/jour</span>
                     </div>
                     <div className="flex justify-between border-t pt-2">
                       <span className="font-bold">TOTAL:</span>
@@ -683,7 +557,7 @@ export default function ExtendedBooking() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={loading || !formData.roomId || !formData.climateType || !formData.checkIn || !formData.checkOut || !formData.clientFirstName}
+                  disabled={loading || !formData.roomId || !formData.checkIn || !formData.checkOut || !formData.clientFirstName}
                   className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
                 >
                   {loading ? (
@@ -702,7 +576,7 @@ export default function ExtendedBooking() {
             </form>
           </motion.div>
 
-          {/* Info séjour prolongé avec climatisation */}
+          {/* Info séjour prolongé */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -710,7 +584,7 @@ export default function ExtendedBooking() {
             className="mt-6 bg-white rounded-lg shadow-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">📋 Informations Séjour Prolongé</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-4 bg-purple-50 rounded-lg">
                 <div className="font-semibold text-purple-900">Durée minimum</div>
                 <div className="text-lg font-bold text-purple-600">1 jour</div>
@@ -719,27 +593,23 @@ export default function ExtendedBooking() {
                 <div className="font-semibold text-orange-900">Pièce d'identité</div>
                 <div className="text-lg font-bold text-orange-600">Obligatoire</div>
               </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="font-semibold text-blue-900">Climatisation</div>
-                <div className="text-lg font-bold text-blue-600">À choisir</div>
-              </div>
               <div className="text-center p-4 bg-green-50 rounded-lg">
                 <div className="font-semibold text-green-900">Tarification</div>
-                <div className="text-lg font-bold text-green-600">Tarif × Jours</div>
+                <div className="text-lg font-bold text-green-600">Prix × Nb jours</div>
               </div>
             </div>
             
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-blue-800 text-sm">
-                <strong>ℹ️ Note:</strong> Pour les séjours prolongés, la pièce d'identité ET le type de climatisation 
-                sont obligatoires. Le tarif varie selon la climatisation (+15€/jour pour climatisé).
+                <strong>ℹ️ Note:</strong> Pour les séjours prolongés, la pièce d'identité du client est obligatoire 
+                pour des raisons de sécurité et de traçabilité. Le reçu complet sera généré avec toutes les informations.
               </p>
             </div>
           </motion.div>
 
           {/* Footer info */}
           <div className="mt-6 text-center text-gray-500 text-sm">
-            Séjour Prolongé • Climatisation Obligatoire • msylla01 • 2025-10-04 23:53:37
+            Séjour Prolongé • Espace Gérant • msylla01 • 2025-10-03 23:20:33
           </div>
         </main>
       </div>

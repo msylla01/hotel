@@ -149,16 +149,12 @@ model Review {
   @@index([createdAt])
 }
 
-// MODÈLE ESPACE GÉRANT - CORRIGÉ SANS DUPLICATION
+// NOUVEAU MODÈLE: Espace Gérant - Réservations physiques sur place
 model ManagerBooking {
   id                String   @id @default(cuid())
   
   // Type de séjour
   type              ManagerBookingType
-  
-  // CHAMPS CLIMATISATION (ajoutés si manquants)
-  climateType       ClimateType?
-  roomType          String?
   
   // Informations client (obligatoires pour séjours prolongés)
   clientFirstName   String?
@@ -213,10 +209,9 @@ model ManagerBooking {
   @@index([managerId])
   @@index([createdAt])
   @@index([checkOut])
-  @@index([climateType])
 }
 
-// MODÈLE: Log d'activité espace gérant
+// NOUVEAU MODÈLE: Log d'activité espace gérant
 model ManagerActivityLog {
   id          String   @id @default(cuid())
   
@@ -244,7 +239,7 @@ model ManagerActivityLog {
   @@index([createdAt])
 }
 
-// Enums existants
+// Enums existants étendus
 enum Role {
   CLIENT
   ADMIN
@@ -285,7 +280,7 @@ enum PaymentStatus {
   REFUNDED
 }
 
-// ENUMS: Espace Gérant
+// NOUVEAUX ENUMS: Espace Gérant
 enum ManagerBookingType {
   HOURLY
   NIGHTLY
@@ -310,8 +305,15 @@ enum ManagerAction {
   CREATE
 }
 
-// Enum pour type de climatisation
+// Ajout enum pour type de climatisation
 enum ClimateType {
   CLIMATISE
   VENTILE
+}
+
+// Ajout champs climatisation et type chambre pour les réservations
+model ManagerBooking {
+  // ... autres champs existants ...
+  climateType    ClimateType?
+  roomType       String?
 }

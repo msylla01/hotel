@@ -31,10 +31,11 @@ export default function ManagerDashboard() {
   const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
+    // Vérifier l'authentification gérant
     const token = localStorage.getItem('hotel_token')
     const userData = localStorage.getItem('hotel_user')
     
-    console.log('🔐 Vérification auth gérant [msylla01] - 2025-10-04 22:59:43')
+    console.log('�� Vérification auth gérant [msylla01] - 2025-10-04 02:57:35')
     
     if (!token || !userData) {
       router.push('/auth/login')
@@ -53,12 +54,14 @@ export default function ManagerDashboard() {
       setUser(user)
       fetchDashboardData()
 
+      // Actualisation automatique toutes les 30 secondes pour la marge de 10min
       const interval = setInterval(() => {
         setCurrentTime(new Date())
         fetchDashboardData()
       }, 30000)
       setRefreshInterval(interval)
 
+      // Horloge temps réel chaque seconde
       const clockInterval = setInterval(() => {
         setCurrentTime(new Date())
       }, 1000)
@@ -78,97 +81,75 @@ export default function ManagerDashboard() {
       setLoading(true)
       setError('')
 
-      console.log('📊 Récupération dashboard avec noms originaux [msylla01] - 2025-10-04 22:59:43')
-
       const token = localStorage.getItem('hotel_token')
       const response = await fetch('http://localhost:5000/api/manager/dashboard', {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
-      console.log('📡 Réponse dashboard:', response.status)
-
       const data = await response.json()
 
       if (response.ok && data.success) {
-        console.log('✅ Données dashboard reçues:', data.data?.rooms?.length, 'chambres')
-        
-        // Log des noms de chambres reçus
-        if (data.data?.rooms) {
-          console.log('🏨 Noms chambres reçus du backend:')
-          data.data.rooms.forEach(room => {
-            console.log(`   ${room.id}: "${room.name}" (${room.type})`)
-          })
-        }
-        
         setDashboardData(data.data)
       } else {
-        console.log('⚠️ Erreur API dashboard, utilisation fallback:', data.message)
         throw new Error(data.message || 'Erreur de récupération')
       }
     } catch (error) {
       console.error('❌ Erreur récupération dashboard gérant [msylla01]:', error)
       setError(error.message)
       
-      // IMPORTANT: Fallback avec vrais noms maintenant
-      console.log('📋 Utilisation fallback avec noms originaux')
+      // Fallback data avec climatisation
       setDashboardData({
         stats: {
           totalRooms: 5,
-          occupiedRooms: 1,
-          availableRooms: 4,
-          roomsInCleaningBuffer: 0,
-          activeBookings: 1,
+          occupiedRooms: 2,
+          availableRooms: 2,
+          roomsInCleaningBuffer: 1,
+          activeBookings: 2,
           expiredBookings: 0,
-          todayBookings: 2,
+          todayBookings: 3,
           todayRevenue: 175,
-          occupancyRate: 20
+          occupancyRate: 40
         },
         rooms: [
           { 
             id: '1', 
-            name: 'Chambre 101', // NOMS ORIGINAUX dans fallback
+            name: 'CH1 - Chambre 101', 
             type: 'DOUBLE', 
             climateType: 'VENTILE',
-            price: 120,
-            isOccupied: false, 
-            currentBooking: null,
+            isOccupied: true, 
+            currentBooking: { type: 'HOURLY', checkOut: new Date(Date.now() + 2*60*60*1000) },
             timeUntilAvailable: null
           },
           { 
             id: '2', 
-            name: 'Suite 201', // NOMS ORIGINAUX dans fallback
+            name: 'CH2 - Suite 201', 
             type: 'SUITE', 
             climateType: 'CLIMATISE',
-            price: 250,
-            isOccupied: true,
-            currentBooking: { type: 'NIGHTLY', checkOut: new Date(Date.now() + 8*60*60*1000) },
-            timeUntilAvailable: null
-          },
-          { 
-            id: '3', 
-            name: 'Chambre 102', // NOMS ORIGINAUX dans fallback
-            type: 'SINGLE', 
-            climateType: 'VENTILE',
-            price: 80,
             isOccupied: false,
             timeUntilAvailable: null
           },
           { 
+            id: '3', 
+            name: 'CH3 - Chambre 102', 
+            type: 'SINGLE', 
+            climateType: 'VENTILE',
+            isOccupied: false,
+            timeUntilAvailable: 8 // 8 minutes restantes avant disponibilité
+          },
+          { 
             id: '4', 
-            name: 'Chambre 103', // NOMS ORIGINAUX dans fallback
+            name: 'CH4 - Chambre 103', 
             type: 'DOUBLE', 
             climateType: 'CLIMATISE',
-            price: 135,
-            isOccupied: false, 
-            currentBooking: null,
+            isOccupied: true, 
+            currentBooking: { type: 'NIGHTLY', checkOut: new Date(Date.now() + 8*60*60*1000) },
             timeUntilAvailable: null
           },
           { 
             id: '5', 
-            name: 'Suite 202', // NOMS ORIGINAUX dans fallback
+            name: 'CH5 - Suite 202', 
             type: 'SUITE', 
             climateType: 'CLIMATISE',
-            price: 280,
             isOccupied: false,
             timeUntilAvailable: null
           }
@@ -207,11 +188,11 @@ export default function ManagerDashboard() {
 
   const getRoomStatusColor = (room) => {
     if (room.timeUntilAvailable !== null && room.timeUntilAvailable > 0) {
-      return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+      return 'bg-yellow-100 text-yellow-800 border-yellow-300' // En période de nettoyage
     }
     
     if (!room.isOccupied) {
-      return 'bg-green-100 text-green-800 border-green-300'
+      return 'bg-green-100 text-green-800 border-green-300' // Disponible
     }
     
     if (room.currentBooking) {
@@ -219,11 +200,11 @@ export default function ManagerDashboard() {
       const now = new Date()
       const minutesLeft = Math.round((checkOut - now) / (1000 * 60))
       
-      if (minutesLeft < 0) return 'bg-red-100 text-red-800 border-red-300'
-      if (minutesLeft < 30) return 'bg-orange-100 text-orange-800 border-orange-300'
+      if (minutesLeft < 0) return 'bg-red-100 text-red-800 border-red-300' // Expiré
+      if (minutesLeft < 30) return 'bg-orange-100 text-orange-800 border-orange-300' // Bientôt fini
     }
     
-    return 'bg-blue-100 text-blue-800 border-blue-300'
+    return 'bg-blue-100 text-blue-800 border-blue-300' // Occupé normal
   }
 
   const getRoomStatusText = (room) => {
@@ -303,7 +284,7 @@ export default function ManagerDashboard() {
     <>
       <Head>
         <title>Espace Gérant - Hotel Luxe</title>
-        <meta name="description" content="Espace gérant avec noms originaux des chambres" />
+        <meta name="description" content="Espace gérant avec gestion climatisation et marge 10min" />
       </Head>
 
       <div className="min-h-screen bg-gray-50">
@@ -320,13 +301,14 @@ export default function ManagerDashboard() {
                   <span className="text-xs text-blue-600 ml-2">HOTEL LUXE</span>
                 </div>
                 
+                {/* Horloge temps réel */}
                 <div className="bg-blue-50 px-3 py-1 rounded text-sm">
                   🕐 {currentTime.toLocaleTimeString('fr-FR')}
                 </div>
                 
                 {error && (
                   <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded text-xs">
-                    Mode Fallback - Noms originaux
+                    Mode Fallback
                   </div>
                 )}
               </div>
@@ -374,7 +356,7 @@ export default function ManagerDashboard() {
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Vue d'ensemble */}
+          {/* Vue d'ensemble avec marge de nettoyage */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -383,10 +365,10 @@ export default function ManagerDashboard() {
             <div className="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl p-8 text-white">
               <h1 className="text-3xl font-bold mb-2">Espace Gérant 🏨</h1>
               <p className="text-blue-100 mb-4">
-                Bienvenue {user?.firstName} ! Gestion avec noms originaux des chambres.
+                Bienvenue {user?.firstName} ! Gestion temps réel avec marge nettoyage 10min.
               </p>
               <div className="text-xs text-blue-200 mb-4">
-                ✅ {user?.email} • 🕐 {currentTime.toLocaleString('fr-FR')} • Chambres: {dashboardData?.rooms?.length || 0}
+                ✅ {user?.email} • 🕐 {currentTime.toLocaleString('fr-FR')} • Marge: {dashboardData?.cleaningMargin || 10}min
               </div>
               
               {dashboardData?.stats && (
@@ -416,32 +398,32 @@ export default function ManagerDashboard() {
             </div>
           </motion.div>
 
-          {/* Actions rapides */}
+          {/* Actions rapides avec tarifs climatisation */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[
               {
                 title: 'Séjour Horaire',
-                description: '1h à 5h • Ventilé/Climatisé',
+                description: '1h à 5h',
                 icon: ClockIcon,
                 href: '/manager/booking/hourly',
                 color: 'bg-green-500 hover:bg-green-600',
-                rate: 'Choisir type climatisation'
+                rate: 'Ventilé: 15-25€/h • Climatisé: 18-30€/h'
               },
               {
                 title: 'Nuitée',
-                description: '22h00 - 12h00 • Ventilé/Climatisé',
+                description: '22h00 - 12h00',
                 icon: CalendarDaysIcon,
                 href: '/manager/booking/nightly',
                 color: 'bg-blue-500 hover:bg-blue-600',
-                rate: 'Selon climatisation'
+                rate: 'Selon type + climatisation'
               },
               {
                 title: 'Séjour Prolongé',
-                description: 'Plusieurs jours • Ventilé/Climatisé',
+                description: 'Plusieurs jours',
                 icon: UserGroupIcon,
                 href: '/manager/booking/extended',
                 color: 'bg-purple-500 hover:bg-purple-600',
-                rate: 'Pièce ID + climatisation'
+                rate: 'Avec pièce d\'identité'
               },
               {
                 title: 'Rapports',
@@ -449,7 +431,7 @@ export default function ManagerDashboard() {
                 icon: ChartBarIcon,
                 href: '/manager/reports',
                 color: 'bg-orange-500 hover:bg-orange-600',
-                rate: 'Export CSV'
+                rate: 'Export CSV disponible'
               }
             ].map((action, index) => (
               <motion.div
@@ -483,7 +465,7 @@ export default function ManagerDashboard() {
             ))}
           </div>
 
-          {/* État des chambres - AFFICHAGE NOMS ORIGINAUX CORRIGÉ */}
+          {/* État des chambres avec climatisation et marge */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -492,10 +474,10 @@ export default function ManagerDashboard() {
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-gray-900">
-                🏨 Chambres (Noms originaux de la base)
+                🏨 Chambres Temps Réel (Marge 10min)
               </h3>
               <div className="text-sm text-gray-500">
-                🕐 {currentTime.toLocaleTimeString('fr-FR')} • {dashboardData?.rooms?.length || 0} chambres
+                🕐 {currentTime.toLocaleTimeString('fr-FR')} • Auto-refresh 30s
               </div>
             </div>
             
@@ -508,13 +490,10 @@ export default function ManagerDashboard() {
                     animate={{ opacity: 1, scale: 1 }}
                     className={`p-4 rounded-lg border-2 transition-all duration-200 ${getRoomStatusColor(room)}`}
                   >
-                    {/* AFFICHAGE NOM ORIGINAL SANS TRANSFORMATION */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-2">
                         <span className="text-lg">{getRoomTypeIcon(room.type)}</span>
-                        <h4 className="font-bold text-lg text-gray-900">
-                          {room.name}
-                        </h4>
+                        <h4 className="font-semibold">{room.name}</h4>
                         {getClimateIcon(room.climateType)}
                       </div>
                       <div className="text-right">
@@ -524,11 +503,6 @@ export default function ManagerDashboard() {
                         <div className="text-xs text-gray-600 mt-1">
                           {getClimateText(room.climateType)}
                         </div>
-                        {room.price && (
-                          <div className="text-xs font-bold text-green-600 mt-1">
-                            {room.price}€
-                          </div>
-                        )}
                       </div>
                     </div>
                     
@@ -584,40 +558,51 @@ export default function ManagerDashboard() {
               <div className="text-center py-8">
                 <BuildingOfficeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500">Aucune chambre disponible</p>
-                <p className="text-xs text-gray-400 mt-2">Vérifiez la base de données</p>
               </div>
             )}
           </motion.div>
 
-          {/* Debug info */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="mt-6 bg-orange-50 rounded-lg p-4"
-            >
-              <h4 className="font-medium text-orange-900 mb-2">🔧 Mode Debug Activé</h4>
-              <p className="text-sm text-orange-800">
-                Utilisation des données fallback avec noms originaux. 
-                Erreur API: {error}
-              </p>
-              <div className="mt-2 text-xs text-orange-700">
-                Développeur: msylla01 • 2025-10-04 22:59:43
-              </div>
-            </motion.div>
-          )}
+          {/* Info tarifs climatisation */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="mt-6 bg-white rounded-lg shadow-sm p-6"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">🌡️ Tarifs selon Climatisation</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {['SINGLE', 'DOUBLE', 'SUITE', 'FAMILY', 'DELUXE'].map(type => (
+                <div key={type} className="space-y-2">
+                  <div className="font-semibold text-gray-900 text-center">{type}</div>
+                  <div className="text-center p-3 bg-orange-50 rounded-lg">
+                    <FireIcon className="w-4 h-4 text-orange-500 mx-auto mb-1" />
+                    <div className="text-sm font-bold text-orange-600">
+                      {dashboardData?.hourlyRates?.[`${type}_VENTILE`] || 15}€/h
+                    </div>
+                    <div className="text-xs text-gray-600">Ventilé</div>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <CloudIcon className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                    <div className="text-sm font-bold text-blue-600">
+                      {dashboardData?.hourlyRates?.[`${type}_CLIMATISE`] || 18}€/h
+                    </div>
+                    <div className="text-xs text-gray-600">Climatisé</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
 
-          {/* Footer info */}
+          {/* Footer info avec marge */}
           <div className="mt-8 text-center text-gray-500 text-sm">
             <p className="mb-2">
-              🏨 Espace Gérant • Noms originaux • Climatisation • msylla01 • 2025-10-04 22:59:43
+              🏨 Espace Gérant • Marge 10min • Climatisation • msylla01 • 2025-10-04 02:57:35
             </p>
             <div className="flex justify-center space-x-4 text-xs">
-              <span>🏷️ Noms réels de la base</span>
-              <span>🌡️ Ventilé/Climatisé obligatoire</span>
-              <span>🧹 Marge 10min</span>
-              <span>⏰ Auto-refresh 30s</span>
+              <span>⏰ Auto-refresh: 30s</span>
+              <span>🧹 Marge nettoyage: 10min</span>
+              <span>🌡️ Ventilé/Climatisé</span>
+              <span>🏷️ Codes: CH1, CH2...</span>
               {error && <span className="text-orange-600">⚠️ Mode Fallback</span>}
             </div>
           </div>
